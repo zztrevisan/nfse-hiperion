@@ -1,0 +1,29 @@
+# Ambientes Python
+.venv/
+.buildvenv*/
+__pycache__/
+*.py[cod]
+
+# Compilação e empacotamento
+.packaging/
+build/
+dist/
+release/*.exe
+release/*.zip
+*.spec
+
+# Dados locais e segredos
+*.db
+*.sqlite*
+*.pfx
+*.p12
+*.pem
+*.key
+*.log
+.env
+
+# Sistema e editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

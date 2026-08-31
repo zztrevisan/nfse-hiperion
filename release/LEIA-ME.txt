@@ -1,0 +1,15 @@
+NFS-e HIPERION - VERSAO 1.0.0
+
+1. Copie NFSe-Hiperion-1.0.0.exe para o computador do funcionario.
+2. Abra o executavel. Nao e necessario instalar Python.
+3. Na primeira abertura, selecione a raiz fiscal do ano (normalmente H:\2026).
+4. Cadastre as empresas e os certificados A1 pela tela.
+5. Digite senhas somente dentro do aplicativo.
+
+Cada usuario do Windows possui seu proprio cadastro protegido em:
+%LOCALAPPDATA%\NFSeLote
+
+O usuario precisa ter acesso a unidade H: e a internet.
+
+Versao: 1.0.0
+SHA-256: C623791FE1BEA978903B2F9538E067A1F53402040758D4089C5E531100517887
