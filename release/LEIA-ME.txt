@@ -13,4 +13,4 @@ Cada usuario do Windows possui seu proprio cadastro protegido em:
 O usuario precisa ter acesso a unidade H: e a internet.
 
 Versao: 1.1.1
-SHA-256: 7964E5F6AF6D9714F1E0894A9E3B352DE37AB5338F6AFAA8FF53B07E585FE250
+SHA-256: A56054583E0A6B8D9FA80C3076546A5AAFDE4F7CEA47BF21F11CDA9ED950B47B

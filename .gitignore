@@ -19,6 +19,7 @@ release/*.zip
 *.p12
 Cadastros-*.xlsx
 relatorio-certificados-*.csv
+assinatura/*.cer
 *.pem
 *.key
 *.log
