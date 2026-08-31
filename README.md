@@ -2,11 +2,12 @@
 
 Aplicativo local em Python para selecionar uma competência e processar várias empresas sem interromper o lote quando uma delas falha.
 
-Versão atual: `1.1.0`.
+Versão atual: `1.1.1`.
 
 ## O que já funciona
 
 - cadastro de empresas (CNPJ, razão social e certificado A1 `.pfx`/`.p12`);
+- edição do cadastro pelo botão **Editar** ou com dois cliques na empresa;
 - importação em lote da planilha de cadastros do SIEG e de uma pasta inteira de certificados;
 - leitura automática de `NUMERO BOX - RAZAO SOCIAL\CERTIFICADO DIGITAL\arquivo.pfx`;
 - descoberta da pasta `NUMERO BOX - RAZAO SOCIAL`, preferencialmente por um arquivo marcador de CNPJ;

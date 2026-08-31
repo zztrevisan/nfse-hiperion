@@ -98,8 +98,10 @@ class App(tk.Tk):
         for key, title, width in (("cnpj", "CNPJ", 130), ("name", "Razão social", 260), ("cert", "Certificado", 280)):
             self.tree.heading(key, text=title); self.tree.column(key, width=width)
         self.tree.pack(fill="both", expand=True)
+        self.tree.bind("<Double-1>", lambda _event: self._edit_company())
         bar = ttk.Frame(companies); bar.pack(fill="x", pady=8)
         ttk.Button(bar, text="Adicionar", command=self._company_dialog).pack(side="left")
+        ttk.Button(bar, text="Editar", command=self._edit_company).pack(side="left", padx=6)
         ttk.Button(bar, text="Importar SIEG + certificados…", command=self._bulk_import).pack(side="left", padx=6)
         ttk.Button(bar, text="Excluir", command=self._delete).pack(side="left", padx=6)
         ttk.Label(config, text="Pasta raiz FISCAL do ano (exemplo: H:\\2026)").pack(anchor="w")
@@ -148,6 +150,16 @@ class App(tk.Tk):
         if selected and messagebox.askyesno("Excluir", "Excluir a empresa selecionada?"):
             self.db.delete_company(int(selected[0])); self._refresh()
 
+    def _edit_company(self):
+        selected = self.tree.selection()
+        if not selected:
+            messagebox.showinfo("Editar empresa", "Selecione uma empresa na lista.")
+            return
+        company_id = int(selected[0])
+        company = next((item for item in self.db.companies() if item.id == company_id), None)
+        if company:
+            self._company_dialog(company)
+
     def _bulk_import(self):
         spreadsheet = filedialog.askopenfilename(
             title="Selecione a planilha de cadastros do SIEG", filetypes=[("Planilha Excel", "*.xlsx")]
@@ -194,12 +206,16 @@ class App(tk.Tk):
             f"Relatório salvo em:\n{report}\n\nNenhuma senha foi gravada no relatório.",
         )
 
-    def _company_dialog(self):
-        dialog = tk.Toplevel(self); dialog.title("Adicionar empresa"); dialog.transient(self); dialog.grab_set()
+    def _company_dialog(self, company=None):
+        dialog = tk.Toplevel(self); dialog.title("Editar empresa" if company else "Adicionar empresa"); dialog.transient(self); dialog.grab_set()
         fields = {}
         for row, (key, label, show) in enumerate((("cnpj", "CNPJ", ""), ("name", "Razão social", ""), ("cert", "Certificado A1", ""), ("password", "Senha do A1", "*"))):
             ttk.Label(dialog, text=label).grid(row=row, column=0, sticky="w", padx=10, pady=7)
             fields[key] = tk.StringVar(); ttk.Entry(dialog, textvariable=fields[key], show=show, width=55).grid(row=row, column=1, padx=10, pady=7)
+        if company:
+            fields["cnpj"].set(company.cnpj)
+            fields["name"].set(company.legal_name)
+            fields["cert"].set(str(company.certificate_path))
         def choose():
             selected = filedialog.askopenfilename(filetypes=[("Certificado A1", "*.pfx *.p12")])
             if selected: fields["cert"].set(selected)
@@ -215,7 +231,8 @@ class App(tk.Tk):
             cnpj = "".join(ch for ch in fields["cnpj"].get() if ch.isdigit()); cert = Path(fields["cert"].get().strip())
             if len(cnpj) != 14 or not fields["name"].get().strip() or cert.suffix.lower() not in {".pfx", ".p12"}:
                 messagebox.showerror("Dados inválidos", "Informe CNPJ, razão social e certificado PFX/P12.", parent=dialog); return
-            try: self.db.save_company(Company(None, cnpj, fields["name"].get().strip(), cert, protect(fields["password"].get())))
+            password = protect(fields["password"].get()) if fields["password"].get() else (company.encrypted_password if company else b"")
+            try: self.db.save_company(Company(company.id if company else None, cnpj, fields["name"].get().strip(), cert, password))
             except Exception as exc: messagebox.showerror("Erro", str(exc), parent=dialog); return
             dialog.destroy(); self._refresh()
         ttk.Button(dialog, text="Salvar", command=save).grid(row=4, column=1, sticky="e", padx=10, pady=10)
