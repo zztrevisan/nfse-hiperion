@@ -17,6 +17,7 @@ release/*.zip
 *.sqlite*
 *.pfx
 *.p12
+Cadastros-*.xlsx
 *.pem
 *.key
 *.log

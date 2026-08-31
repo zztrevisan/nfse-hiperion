@@ -10,6 +10,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from .database import Database, data_dir
 from .folders import find_a1_certificate, legal_name_from_folder
+from .importer import read_sieg_companies, scan_certificates, write_report
 from .models import Company
 from .providers import AdnProvider, SimulationProvider
 from .security import protect
@@ -99,6 +100,7 @@ class App(tk.Tk):
         self.tree.pack(fill="both", expand=True)
         bar = ttk.Frame(companies); bar.pack(fill="x", pady=8)
         ttk.Button(bar, text="Adicionar", command=self._company_dialog).pack(side="left")
+        ttk.Button(bar, text="Importar SIEG + certificados…", command=self._bulk_import).pack(side="left", padx=6)
         ttk.Button(bar, text="Excluir", command=self._delete).pack(side="left", padx=6)
         ttk.Label(config, text="Pasta raiz FISCAL do ano (exemplo: H:\\2026)").pack(anchor="w")
         line = ttk.Frame(config); line.pack(fill="x", pady=8)
@@ -145,6 +147,46 @@ class App(tk.Tk):
         selected = self.tree.selection()
         if selected and messagebox.askyesno("Excluir", "Excluir a empresa selecionada?"):
             self.db.delete_company(int(selected[0])); self._refresh()
+
+    def _bulk_import(self):
+        spreadsheet = filedialog.askopenfilename(
+            title="Selecione a planilha de cadastros do SIEG", filetypes=[("Planilha Excel", "*.xlsx")]
+        )
+        if not spreadsheet:
+            return
+        certificates_root = filedialog.askdirectory(title="Selecione a pasta onde estão os certificados A1")
+        if not certificates_root:
+            return
+        try:
+            companies = read_sieg_companies(Path(spreadsheet))
+            items = scan_certificates(Path(certificates_root), companies)
+        except Exception as exc:
+            messagebox.showerror("Importação", f"Não foi possível analisar os arquivos:\n{exc}")
+            return
+        ready = [item for item in items if item.status == "PRONTO"]
+        if not messagebox.askyesno(
+            "Conferir importação",
+            f"Empresas na planilha: {len(companies)}\nCertificados encontrados: {len(items)}\n"
+            f"Prontos para cadastrar: {len(ready)}\nCom pendência: {len(items) - len(ready)}\n\n"
+            "Cadastrar os itens prontos?",
+        ):
+            return
+        imported, duplicates = 0, set()
+        for item in ready:
+            if item.cnpj in duplicates:
+                item.status, item.detail = "DUPLICADO", "mais de um certificado vinculado ao mesmo CNPJ"
+                continue
+            duplicates.add(item.cnpj)
+            self.db.upsert_company(Company(None, item.cnpj, item.legal_name, item.certificate, protect(item.password)))
+            imported += 1
+        report = data_dir() / "relatorio-certificados.csv"
+        write_report(report, items)
+        self._refresh()
+        messagebox.showinfo(
+            "Importação concluída",
+            f"Cadastros incluídos/atualizados: {imported}\nPendências: {len(items) - imported}\n\n"
+            f"Relatório salvo em:\n{report}\n\nNenhuma senha foi gravada no relatório.",
+        )
 
     def _company_dialog(self):
         dialog = tk.Toplevel(self); dialog.title("Adicionar empresa"); dialog.transient(self); dialog.grab_set()

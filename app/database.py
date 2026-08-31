@@ -41,6 +41,17 @@ class Database:
         )
         self.connection.commit()
 
+    def upsert_company(self, company: Company) -> None:
+        self.connection.execute(
+            """INSERT INTO companies(cnpj,legal_name,certificate_path,encrypted_password,active)
+               VALUES(?,?,?,?,?) ON CONFLICT(cnpj) DO UPDATE SET
+               legal_name=excluded.legal_name, certificate_path=excluded.certificate_path,
+               encrypted_password=excluded.encrypted_password, active=excluded.active""",
+            (company.cnpj, company.legal_name, str(company.certificate_path),
+             company.encrypted_password, company.active),
+        )
+        self.connection.commit()
+
     def companies(self) -> list[Company]:
         rows = self.connection.execute(
             "SELECT id,cnpj,legal_name,certificate_path,encrypted_password,active FROM companies ORDER BY legal_name"
@@ -63,4 +74,3 @@ class Database:
     def delete_company(self, company_id: int) -> None:
         self.connection.execute("DELETE FROM companies WHERE id=?", (company_id,))
         self.connection.commit()
-

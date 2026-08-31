@@ -2,11 +2,12 @@
 
 Aplicativo local em Python para selecionar uma competência e processar várias empresas sem interromper o lote quando uma delas falha.
 
-Versão atual: `1.0.0`.
+Versão atual: `1.1.0`.
 
 ## O que já funciona
 
 - cadastro de empresas (CNPJ, razão social e certificado A1 `.pfx`/`.p12`);
+- importação em lote da planilha de cadastros do SIEG e de uma pasta inteira de certificados;
 - leitura automática de `NUMERO BOX - RAZAO SOCIAL\CERTIFICADO DIGITAL\arquivo.pfx`;
 - descoberta da pasta `NUMERO BOX - RAZAO SOCIAL`, preferencialmente por um arquivo marcador de CNPJ;
 - destino fiscal: emitidas em `02. FISCAL\ARQUIVOS\SERVIÇOS\PRESTADOS\PORTAL NACIONAL\MM.AAAA` e recebidas em `...\TOMADOS\PORTAL NACIONAL\MM.AAAA`;
@@ -30,9 +31,9 @@ Preencha `LEVANTAMENTO_API.md`. Em particular, ainda são necessários:
 3. regra final das pastas de canceladas/substituídas;
 4. alcance da confirmação de duplicidade: arquivo, empresa ou lote.
 
-Não informe senhas em documentos ou mensagens. Cadastre-as somente na tela local do aplicativo.
-
-Se a senha estiver escrita no nome do `.pfx`, renomeie o arquivo e atualize o caminho depois de cadastrá-la. O aplicativo não lê automaticamente arquivos `.key` encontrados nessa pasta.
+Não informe senhas em documentos ou mensagens. Na importação em lote, o aplicativo
+lê o trecho `Senha ...` do nome do PFX/P12; quando não existe, usa o padrão `1234`.
+A senha é imediatamente protegida pelo Windows e nunca aparece no relatório gerado.
 
 ## Como executar
 
@@ -40,12 +41,16 @@ Requer Windows e Python 3.11 ou mais recente.
 
 1. Dê duplo clique em `executar.bat`.
 2. Em **Configurações**, escolha a raiz fiscal do ano, por exemplo `H:\2026`. Não escolha a pasta de Legalização onde estão os certificados.
-3. Em **Empresas**, clique em **Adicionar** e em **Ler pasta do cliente…**. O app preenche a razão social e localiza o A1 em `CERTIFICADO DIGITAL`; informe o CNPJ e a senha pela tela.
+3. Em **Empresas**, use **Importar SIEG + certificados…** para cadastrar em lote. Selecione primeiro a planilha e depois a pasta que contém os PFX/P12. Para um cadastro isolado, continue usando **Adicionar**.
 4. Deixe **Modo simulação** marcado para o primeiro teste.
 5. Escolha mês/ano e selecione **Todas as empresas** ou uma empresa específica.
 6. Marque **Emitidas / Prestados**, **Recebidas / Tomados** ou ambas e inicie o download.
 
 O banco fica em `%LOCALAPPDATA%\NFSeLote\nfse.db` e os logs em `%LOCALAPPDATA%\NFSeLote\logs`.
+
+Ao final da importação, o arquivo `%LOCALAPPDATA%\NFSeLote\relatorio-certificados.csv`
+lista certificados cadastrados, duplicados e pendências. Ele registra apenas a origem
+da senha (nome do arquivo ou padrão), nunca a senha em si.
 
 ### Mapeamento seguro por CNPJ
 

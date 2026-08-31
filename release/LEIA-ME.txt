@@ -1,15 +1,16 @@
-NFS-e HIPERION - VERSAO 1.0.0
+NFS-e HIPERION - VERSAO 1.1.0
 
-1. Copie NFSe-Hiperion-1.0.0.exe para o computador do funcionario.
+1. Copie NFSe-Hiperion-1.1.0.exe para o computador do funcionario.
 2. Abra o executavel. Nao e necessario instalar Python.
 3. Na primeira abertura, selecione a raiz fiscal do ano (normalmente H:\2026).
-4. Cadastre as empresas e os certificados A1 pela tela.
-5. Digite senhas somente dentro do aplicativo.
+4. Na aba Empresas, use "Importar SIEG + certificados" para fazer o cadastro em lote.
+5. Selecione a planilha exportada pelo SIEG e a pasta que contem os certificados.
+6. Confira o relatorio de certificados e corrija somente as pendencias.
 
 Cada usuario do Windows possui seu proprio cadastro protegido em:
 %LOCALAPPDATA%\NFSeLote
 
 O usuario precisa ter acesso a unidade H: e a internet.
 
-Versao: 1.0.0
-SHA-256: C623791FE1BEA978903B2F9538E067A1F53402040758D4089C5E531100517887
+Versao: 1.1.0
+SHA-256: 3357EF2453D22346A72174D39C9AA498FE268108F4BB5C3D22B660E535757E2C
