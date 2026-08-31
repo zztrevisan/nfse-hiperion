@@ -154,9 +154,15 @@ class App(tk.Tk):
         )
         if not spreadsheet:
             return
-        certificates_root = filedialog.askdirectory(title="Selecione a pasta onde estão os certificados A1")
+        saved_root = self.db.setting("certificates_root")
+        default_root = Path(r"D:\01. LEGALIZAÇÃO\1. CERTIFICADORA\CERTIFICADOS")
+        initial = saved_root or (str(default_root) if default_root.is_dir() else "")
+        certificates_root = filedialog.askdirectory(
+            title="Selecione a pasta principal dos certificados A1", initialdir=initial or None
+        )
         if not certificates_root:
             return
+        self.db.set_setting("certificates_root", certificates_root)
         try:
             companies = read_sieg_companies(Path(spreadsheet))
             items = scan_certificates(Path(certificates_root), companies)

@@ -42,6 +42,7 @@ Requer Windows e Python 3.11 ou mais recente.
 1. Dê duplo clique em `executar.bat`.
 2. Em **Configurações**, escolha a raiz fiscal do ano, por exemplo `H:\2026`. Não escolha a pasta de Legalização onde estão os certificados.
 3. Em **Empresas**, use **Importar SIEG + certificados…** para cadastrar em lote. Selecione primeiro a planilha e depois a pasta que contém os PFX/P12. Para um cadastro isolado, continue usando **Adicionar**.
+   O programa pesquisa todas as subpastas e memoriza o caminho escolhido. Nos computadores da Hiperion, ele sugere `D:\01. LEGALIZAÇÃO\1. CERTIFICADORA\CERTIFICADOS` quando a pasta existe.
 4. Deixe **Modo simulação** marcado para o primeiro teste.
 5. Escolha mês/ano e selecione **Todas as empresas** ou uma empresa específica.
 6. Marque **Emitidas / Prestados**, **Recebidas / Tomados** ou ambas e inicie o download.

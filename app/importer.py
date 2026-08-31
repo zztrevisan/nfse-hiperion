@@ -86,6 +86,13 @@ def password_from_filename(path: Path) -> tuple[str, str]:
     return "1234", "padrão 1234"
 
 
+def safe_certificate_path(path: Path) -> str:
+    """Mantém o caminho útil no relatório sem revelar senha escrita no arquivo."""
+    safe_stem = re.sub(r"(\bsenha\s*[-:=]?\s*)[^\s]+", r"\1***", path.stem,
+                       flags=re.IGNORECASE)
+    return str(path.with_name(safe_stem + path.suffix))
+
+
 def certificate_cnpj(path: Path, password: str) -> str:
     key, cert, _ = pkcs12.load_key_and_certificates(path.read_bytes(), password.encode("utf-8"))
     if key is None or cert is None:
@@ -138,5 +145,5 @@ def write_report(path: Path, items: list[ImportItem]) -> None:
         writer = csv.writer(file, delimiter=";")
         writer.writerow(["Arquivo", "CNPJ", "Razão social", "Origem da senha", "Situação", "Detalhe"])
         for item in items:
-            writer.writerow([str(item.certificate), item.cnpj, item.legal_name,
+            writer.writerow([safe_certificate_path(item.certificate), item.cnpj, item.legal_name,
                              item.password_source, item.status, item.detail])

@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 
-from app.importer import password_from_filename, read_sieg_companies
+from app.importer import password_from_filename, read_sieg_companies, safe_certificate_path
 
 
 class ImporterTests(unittest.TestCase):
@@ -22,6 +22,11 @@ class ImporterTests(unittest.TestCase):
         password, source = password_from_filename(Path("EMPRESA LTDA.pfx"))
         self.assertEqual(password, "1234")
         self.assertEqual(source, "padrão 1234")
+
+    def test_masks_password_in_report_path(self):
+        safe = safe_certificate_path(Path(r"D:\CERTIFICADOS\EMPRESA Senha Segredo123.pfx"))
+        self.assertNotIn("Segredo123", safe)
+        self.assertIn("Senha ***", safe)
 
 
 if __name__ == "__main__":
