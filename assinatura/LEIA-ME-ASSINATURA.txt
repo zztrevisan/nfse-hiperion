@@ -2,7 +2,7 @@ NFS-e HIPERION - INSTALACAO INTERNA
 
 1. Extraia todo o conteudo do ZIP.
 2. Execute INSTALAR-CONFIANCA-HIPERION.bat apenas uma vez.
-3. Depois, execute NFSe-Hiperion-1.2.0.exe.
+3. Depois, execute NFSe-Hiperion-1.2.1.exe.
 
 O certificado e destinado somente aos computadores autorizados da Hiperion.
 Ele identifica aplicativos internos assinados pela empresa.

@@ -2,7 +2,9 @@
 
 Aplicativo local em Python para selecionar uma competência e processar várias empresas sem interromper o lote quando uma delas falha.
 
-Versão atual: `1.2.0`.
+Versão atual: `1.2.1`.
+
+Desenvolvido por Guilherme Andrade dos Santos Trevisan para a Hiperion Assessoria Contábil.
 
 ## O que já funciona
 

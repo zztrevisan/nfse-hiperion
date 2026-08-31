@@ -115,7 +115,11 @@ class App(tk.Tk):
         ttk.Button(line, text="Escolher…", command=self._choose_root).pack(side="left", padx=6)
         ttk.Button(config, text="Salvar configuração", command=self._save_config).pack(anchor="w")
         ttk.Label(config, text="Não selecione a pasta de Legalização/certificados aqui. Cada empresa deve aparecer logo abaixo desta raiz.").pack(anchor="w", pady=(4, 0))
-        ttk.Label(config, text=f"{APP_NAME} — versão {APP_VERSION}", foreground="#555555").pack(anchor="w", pady=16)
+        ttk.Label(config, text=f"{APP_NAME} — versão {APP_VERSION}", foreground="#555555").pack(anchor="w", pady=(16, 2))
+        ttk.Label(
+            config, text="Desenvolvido por Guilherme Andrade dos Santos Trevisan",
+            foreground="#777777", font=("Segoe UI", 8),
+        ).pack(anchor="w")
 
     def _first_run(self):
         if self.db.setting("setup_complete") == "1": return
