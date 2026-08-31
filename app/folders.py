@@ -79,7 +79,9 @@ def locate_company_folder(root: Path, cnpj: str, legal_name: str) -> Path:
             name_matches.append(folder)
     if len(name_matches) != 1:
         reason = "nenhuma" if not name_matches else "mais de uma"
-        raise FileNotFoundError(f"{reason} pasta corresponde a {legal_name}")
+        raise FileNotFoundError(
+            f"{reason} pasta corresponde a '{legal_name}'. Pasta pesquisada: {root}"
+        )
     match = name_matches[0]
     (match / ".nfse-cnpj").write_text(wanted_cnpj, encoding="utf-8")
     return match

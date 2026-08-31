@@ -1,4 +1,5 @@
 import logging
+import os
 import queue
 import threading
 import webbrowser
@@ -41,6 +42,7 @@ class App(tk.Tk):
             try: self.iconbitmap(str(icon))
             except tk.TclError: pass
         self.db, self.events = Database(), queue.Queue()
+        self.result_records, self.show_errors_only = [], False
         self.logger = self._make_logger()
         self._build(); self._refresh(); self.after(100, self._drain); self.after(300, self._first_run)
 
@@ -83,14 +85,16 @@ class App(tk.Tk):
         self.run_button.grid(row=5, column=0, columnspan=3, sticky="ew")
         self.progress = ttk.Progressbar(run, maximum=1); self.progress.grid(row=6, column=0, columnspan=3, sticky="ew", pady=10)
         self.status = ttk.Label(run, text="Pronto"); self.status.grid(row=7, column=0, columnspan=3, sticky="w")
-        ttk.Label(run, text="Resultado por empresa — dê dois cliques nos itens vermelhos para abrir o Portal Nacional").grid(row=8, column=0, columnspan=3, sticky="w", pady=(8, 2))
+        ttk.Label(run, text="Resultado por empresa — dê dois cliques para ver detalhes ou abrir a pasta").grid(row=8, column=0, columnspan=2, sticky="w", pady=(8, 2))
+        self.error_button = ttk.Button(run, text="Ver erros (0)", command=self._toggle_errors)
+        self.error_button.grid(row=8, column=2, sticky="e", pady=(8, 2))
         self.result_tree = ttk.Treeview(run, columns=("company", "result", "detail"), show="headings", height=8)
         for key, title, width in (("company", "Empresa", 280), ("result", "Situação", 110), ("detail", "Detalhe", 360)):
             self.result_tree.heading(key, text=title); self.result_tree.column(key, width=width)
         self.result_tree.tag_configure("success", background="#d9f2df", foreground="#165b2b")
         self.result_tree.tag_configure("empty", background="#ffd9d9", foreground="#8b0000")
         self.result_tree.tag_configure("error", background="#ffd9d9", foreground="#8b0000")
-        self.result_tree.bind("<Double-1>", self._open_portal_for_result)
+        self.result_tree.bind("<Double-1>", self._open_result)
         self.result_tree.grid(row=9, column=0, columnspan=3, sticky="nsew")
         self.log = tk.Text(run, height=8, state="disabled", wrap="word"); self.log.grid(row=10, column=0, columnspan=3, sticky="nsew", pady=(8, 0))
         run.columnconfigure(2, weight=1); run.rowconfigure(9, weight=1); run.rowconfigure(10, weight=1)
@@ -250,19 +254,63 @@ class App(tk.Tk):
         if not root.is_dir(): messagebox.showerror("Configuração", "Selecione uma raiz fiscal válida, por exemplo H:\\2026."); return
         if not companies: messagebox.showerror("Empresas", "A empresa selecionada não foi encontrada."); return
         for item in self.result_tree.get_children(): self.result_tree.delete(item)
+        self.result_records.clear(); self.show_errors_only = False; self.error_button.configure(text="Ver erros (0)")
         self.run_button.state(["disabled"]); self.progress.configure(value=0, maximum=max(1, len(companies)))
         service = BatchService(SimulationProvider() if self.simulation.get() else AdnProvider(), self.logger)
         def status(done, total, text): self.events.put(("status", done, total, text))
-        def result(company, state, detail): self.events.put(("result", company.cnpj, company.legal_name, state, detail))
+        def result(company, state, detail, paths): self.events.put(("result", company.cnpj, company.legal_name, state, detail, paths))
         def worker(): self.events.put(("done", *service.run(companies, root, self.year.get(), self.month.get(), status, directions, result)))
         threading.Thread(target=worker, daemon=True).start()
 
-    def _open_portal_for_result(self, _event=None):
+    def _toggle_errors(self):
+        self.show_errors_only = not self.show_errors_only
+        self._render_results()
+
+    def _render_results(self):
+        for item in self.result_tree.get_children():
+            self.result_tree.delete(item)
+        labels = {"success": "Baixado", "empty": "Sem notas", "error": "Erro"}
+        errors = sum(record[2] == "error" for record in self.result_records)
+        for cnpj, company, state, detail, _paths in self.result_records:
+            if self.show_errors_only and state != "error":
+                continue
+            self.result_tree.insert("", "end", iid=cnpj, values=(company, labels[state], detail), tags=(state,))
+        self.error_button.configure(text=("Ver todos" if self.show_errors_only else f"Ver erros ({errors})"))
+
+    def _open_result(self, _event=None):
         selected = self.result_tree.selection()
-        if not selected: return
-        tags = self.result_tree.item(selected[0], "tags")
-        if "empty" in tags or "error" in tags:
+        if not selected:
+            return
+        record = next((item for item in self.result_records if item[0] == selected[0]), None)
+        if not record:
+            return
+        _cnpj, company, state, detail, paths = record
+        if state == "empty":
             webbrowser.open(PORTAL_NFSE)
+            return
+        if state == "error":
+            path_text = "\n".join(f"{label}: {path}" for label, path in paths.items())
+            messagebox.showerror("Detalhes do erro", f"{company}\n\n{detail}\n\n{path_text}")
+            root = paths.get("Empresa") or paths.get("Pasta pesquisada")
+            if root and Path(root).is_dir() and messagebox.askyesno("Abrir pasta", "Deseja abrir a pasta pesquisada?"):
+                os.startfile(root)
+            return
+        available = [(direction, path) for direction, path in paths.items()
+                     if direction in {"Emitidas", "Recebidas"} and Path(path).is_dir()]
+        if not available:
+            messagebox.showwarning("Pasta", "A pasta de destino não está disponível.")
+            return
+        if len(available) == 1:
+            os.startfile(available[0][1]); return
+        choice = messagebox.askyesnocancel(
+            "Abrir pasta", "Qual pasta deseja abrir?\n\nSim: Tomados / Recebidas\nNão: Prestados / Emitidas"
+        )
+        if choice is None:
+            return
+        wanted = "Recebidas" if choice else "Emitidas"
+        path = next((path for direction, path in available if direction == wanted), None)
+        if path:
+            os.startfile(path)
 
     def _drain(self):
         try:
@@ -273,9 +321,8 @@ class App(tk.Tk):
                 elif event[0] == "status":
                     _, done, total, text = event; self.progress.configure(value=done, maximum=max(1, total)); self.status.configure(text=text)
                 elif event[0] == "result":
-                    _, cnpj, company, state, detail = event
-                    labels = {"success": "Baixado", "empty": "Sem notas", "error": "Erro"}
-                    self.result_tree.insert("", "end", iid=cnpj, values=(company, labels[state], detail), tags=(state,))
+                    _, cnpj, company, state, detail, paths = event
+                    self.result_records.append((cnpj, company, state, detail, paths)); self._render_results()
                 elif event[0] == "done":
                     _, ok, empty, failed = event; self.run_button.state(["!disabled"]); self.status.configure(text=f"Finalizado: {ok} baixada(s), {empty} sem notas, {failed} erro(s)"); messagebox.showinfo("Lote finalizado", f"Baixadas: {ok}\nSem notas: {empty}\nErros: {failed}")
         except queue.Empty: pass

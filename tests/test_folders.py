@@ -20,6 +20,13 @@ class FolderTests(unittest.TestCase):
             company.mkdir()
             self.assertEqual(locate_company_folder(root, "07339957000106", "YU SHEN MINIMERCADO LTDA"), company)
 
+    def test_missing_company_reports_searched_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with self.assertRaises(FileNotFoundError) as raised:
+                locate_company_folder(root, "07339957000106", "EMPRESA INEXISTENTE LTDA")
+            self.assertIn(str(root), str(raised.exception))
+
     def test_first_match_creates_cnpj_marker(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

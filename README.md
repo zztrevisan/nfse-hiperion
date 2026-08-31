@@ -2,7 +2,7 @@
 
 Aplicativo local em Python para selecionar uma competência e processar várias empresas sem interromper o lote quando uma delas falha.
 
-Versão atual: `1.1.1`.
+Versão atual: `1.2.0`.
 
 ## O que já funciona
 
@@ -16,6 +16,8 @@ Versão atual: `1.1.1`.
 - seleção independente entre `Emitidas / Prestados` e `Recebidas / Tomados`;
 - execução para todas as empresas ou somente uma empresa escolhida;
 - quadro final por empresa: verde para baixada e vermelho para sem notas/erro;
+- painel **Ver erros** com detalhes e caminho pesquisado;
+- duplo clique em resultado concluído abre Tomados ou Prestados da competência;
 - dois cliques em uma empresa vermelha abrem o Portal Nacional para conferência manual;
 - banco SQLite local;
 - senha do A1 protegida pelo DPAPI do Windows — nunca gravada em texto puro;
