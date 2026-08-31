@@ -18,6 +18,7 @@ release/*.zip
 *.pfx
 *.p12
 Cadastros-*.xlsx
+relatorio-certificados-*.csv
 *.pem
 *.key
 *.log
