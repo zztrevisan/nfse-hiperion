@@ -4,10 +4,11 @@ import unicodedata
 import xml.etree.ElementTree as ET
 import zipfile
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 from cryptography.hazmat.primitives.serialization import pkcs12
-from cryptography.x509.oid import ObjectIdentifier
+from cryptography.x509.oid import NameOID, ObjectIdentifier
 
 CNPJ_OID = ObjectIdentifier("2.16.76.1.3.3")
 
@@ -55,26 +56,33 @@ def _xlsx_rows(path: Path):
                 yield [values.get(index, "") for index in range(max(values) + 1)]
 
 
-def read_sieg_companies(path: Path) -> list[dict[str, str]]:
+def read_sieg_companies(path: Path, active_only: bool = True) -> list[dict[str, str]]:
     rows = iter(_xlsx_rows(path))
     try:
         headers = [_normalize(value) for value in next(rows)]
     except StopIteration:
         return []
-    aliases = {"active": "ATIVO NA SIEG", "cnpj": "CNPJ CPF", "trade_name": "NOME FANTASIA",
-               "legal_name": "RAZAO SOCIAL", "nickname": "APELIDO"}
-    indexes = {key: headers.index(label) for key, label in aliases.items() if label in headers}
+    aliases = {
+        "active": ("ATIVO NA SIEG",), "cnpj": ("CNPJ CPF", "CNPJ"),
+        "trade_name": ("NOME FANTASIA",), "legal_name": ("RAZAO SOCIAL",),
+        "nickname": ("APELIDO",),
+    }
+    indexes = {}
+    for key, labels in aliases.items():
+        match = next((headers.index(label) for label in labels if label in headers), None)
+        if match is not None:
+            indexes[key] = match
     if "cnpj" not in indexes:
         raise ValueError("a planilha não possui a coluna CNPJ/CPF")
     result = []
     for row in rows:
         get = lambda key: str(row[indexes[key]] or "").strip() if key in indexes and indexes[key] < len(row) else ""
         cnpj = _digits(get("cnpj"))
-        if len(cnpj) != 14 or _normalize(get("active")) not in {"", "SIM"}:
+        if len(cnpj) != 14 or (active_only and _normalize(get("active")) not in {"", "SIM"}):
             continue
         legal_name = get("legal_name") or get("trade_name") or get("nickname")
         if legal_name:
-            result.append({"cnpj": cnpj, "legal_name": legal_name,
+            result.append({"cnpj": cnpj, "legal_name": legal_name, "active": get("active"),
                            "trade_name": get("trade_name"), "nickname": get("nickname")})
     return result
 
@@ -99,6 +107,23 @@ def certificate_cnpj(path: Path, password: str) -> str:
         raise ValueError("certificado sem chave privada")
     attrs = cert.subject.get_attributes_for_oid(CNPJ_OID)
     return _digits(attrs[0].value) if attrs else ""
+
+
+def certificate_identity(path: Path, password: str) -> tuple[str, datetime]:
+    key, cert, _ = pkcs12.load_key_and_certificates(path.read_bytes(), password.encode("utf-8"))
+    if key is None or cert is None:
+        raise ValueError("certificado sem chave privada")
+    attrs = cert.subject.get_attributes_for_oid(CNPJ_OID)
+    cnpj = _digits(attrs[0].value) if attrs else ""
+    if len(cnpj) != 14:
+        common_names = cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
+        common_name = common_names[0].value if common_names else ""
+        suffix = re.search(r"(?:^|:)(\d{14})$", common_name.strip())
+        cnpj = suffix.group(1) if suffix else ""
+    expires = getattr(cert, "not_valid_after_utc", None)
+    if expires is None:
+        expires = cert.not_valid_after.replace(tzinfo=timezone.utc)
+    return cnpj, expires
 
 
 @dataclass
@@ -138,6 +163,58 @@ def scan_certificates(certificates_root: Path, companies: list[dict[str, str]]) 
             detail = "CNPJ do certificado" if company["cnpj"] == cert_cnpj else "vínculo pelo nome da empresa"
             results.append(ImportItem(certificate, company["cnpj"], company["legal_name"], password, source, "PRONTO", detail))
     return results
+
+
+def scan_legalization_certificates(legalization_root: Path,
+                                   companies: list[dict[str, str]]) -> list[ImportItem]:
+    """Seleciona um A1 válido e mais recente por CNPJ nas pastas CERTIFICADO DIGITAL."""
+    by_cnpj = {item["cnpj"]: item for item in companies}
+    candidates: dict[str, list[tuple[datetime, ImportItem]]] = {}
+    results: list[ImportItem] = []
+    now = datetime.now(timezone.utc)
+    company_folders = [path for path in legalization_root.iterdir() if path.is_dir()]
+    for company_folder in company_folders:
+        certificate_dirs = [
+            path for path in company_folder.rglob("*")
+            if path.is_dir() and _normalize(path.name) == "CERTIFICADO DIGITAL"
+        ]
+        certificates = sorted({
+            path for folder in certificate_dirs for path in folder.rglob("*")
+            if path.suffix.lower() in {".pfx", ".p12"}
+        })
+        for certificate in certificates:
+            password, source = password_from_filename(certificate)
+            attempts = [(password, source)] + ([('1234', 'padrão 1234')] if password != "1234" else [])
+            parsed = None
+            for candidate_password, candidate_source in attempts:
+                try:
+                    cnpj, expires = certificate_identity(certificate, candidate_password)
+                    parsed = cnpj, expires, candidate_password, candidate_source
+                    break
+                except Exception:
+                    pass
+            if parsed is None:
+                results.append(ImportItem(certificate, "", "", "", source, "ERRO", "senha inválida ou A1 ilegível"))
+                continue
+            cnpj, expires, password, source = parsed
+            company = by_cnpj.get(cnpj)
+            if company is None:
+                results.append(ImportItem(certificate, cnpj, "", "", source, "NÃO VINCULADO", "CNPJ não encontrado na planilha"))
+                continue
+            if expires < now:
+                results.append(ImportItem(certificate, cnpj, company["legal_name"], "", source, "VENCIDO", f"validade encerrada em {expires:%d/%m/%Y}"))
+                continue
+            item = ImportItem(certificate, cnpj, company["legal_name"], password, source, "PRONTO", f"válido até {expires:%d/%m/%Y}")
+            candidates.setdefault(cnpj, []).append((expires, item))
+    for cnpj, choices in candidates.items():
+        choices.sort(key=lambda value: value[0], reverse=True)
+        results.append(choices[0][1])
+        for expires, item in choices[1:]:
+            item.password = ""
+            item.status = "ANTERIOR"
+            item.detail = f"A1 válido, mas existe outro mais recente; validade {expires:%d/%m/%Y}"
+            results.append(item)
+    return sorted(results, key=lambda item: (item.legal_name or "ZZZ", str(item.certificate)))
 
 
 def write_report(path: Path, items: list[ImportItem]) -> None:

@@ -2,7 +2,7 @@
 
 ## Pacote interno gratuito
 
-O pacote `NFSe-Hiperion-1.2.1-INTERNO.zip` inclui o certificado público da
+O pacote `NFSe-Hiperion-1.4.0-INTERNO.zip` inclui o certificado público da
 Hiperion e o arquivo `INSTALAR-CONFIANCA-HIPERION.bat`. Cada funcionário deve
 executar esse instalador uma vez antes de abrir o aplicativo. A chave privada
 de assinatura permanece somente no computador responsável pelas versões.

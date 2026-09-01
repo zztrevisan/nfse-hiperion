@@ -11,7 +11,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from .database import Database, data_dir
 from .folders import find_a1_certificate, legal_name_from_folder
-from .importer import read_sieg_companies, scan_certificates, write_report
+from .importer import read_sieg_companies, scan_legalization_certificates, write_report
 from .models import Company
 from .providers import AdnProvider, SimulationProvider
 from .security import protect
@@ -36,7 +36,7 @@ class QueueHandler(logging.Handler):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title(f"{APP_NAME} — {APP_VERSION}"); self.geometry("850x690"); self.minsize(720, 590)
+        self.title(f"{APP_NAME} — {APP_VERSION}"); self.geometry("930x760"); self.minsize(780, 650)
         icon = resource_path("assets/app.ico")
         if icon.is_file():
             try: self.iconbitmap(str(icon))
@@ -85,9 +85,15 @@ class App(tk.Tk):
         self.run_button.grid(row=5, column=0, columnspan=3, sticky="ew")
         self.progress = ttk.Progressbar(run, maximum=1); self.progress.grid(row=6, column=0, columnspan=3, sticky="ew", pady=10)
         self.status = ttk.Label(run, text="Pronto"); self.status.grid(row=7, column=0, columnspan=3, sticky="w")
-        ttk.Label(run, text="Resultado por empresa — dê dois cliques para ver detalhes ou abrir a pasta").grid(row=8, column=0, columnspan=2, sticky="w", pady=(8, 2))
-        self.error_button = ttk.Button(run, text="Ver erros (0)", command=self._toggle_errors)
-        self.error_button.grid(row=8, column=2, sticky="e", pady=(8, 2))
+        summary = ttk.Frame(run); summary.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(10, 6))
+        self.summary_vars = {key: tk.StringVar(value="0") for key in ("processed", "success", "empty", "error")}
+        for column, (key, label) in enumerate((("processed", "Processadas"), ("success", "Baixadas"), ("empty", "Sem notas"), ("error", "Erros"))):
+            card = ttk.LabelFrame(summary, text=label, padding=(18, 7)); card.grid(row=0, column=column, sticky="ew", padx=(0 if column == 0 else 5, 0))
+            ttk.Label(card, textvariable=self.summary_vars[key], font=("Segoe UI", 16, "bold")).pack()
+            summary.columnconfigure(column, weight=1)
+        ttk.Label(run, text="Resultado por empresa — dê dois cliques para ver detalhes ou abrir a pasta").grid(row=9, column=0, columnspan=2, sticky="w", pady=(4, 2))
+        self.error_button = ttk.Button(run, text="Ver pendências (0)", command=self._toggle_errors)
+        self.error_button.grid(row=9, column=2, sticky="e", pady=(4, 2))
         self.result_tree = ttk.Treeview(run, columns=("company", "result", "detail"), show="headings", height=8)
         for key, title, width in (("company", "Empresa", 280), ("result", "Situação", 110), ("detail", "Detalhe", 360)):
             self.result_tree.heading(key, text=title); self.result_tree.column(key, width=width)
@@ -95,9 +101,11 @@ class App(tk.Tk):
         self.result_tree.tag_configure("empty", background="#ffd9d9", foreground="#8b0000")
         self.result_tree.tag_configure("error", background="#ffd9d9", foreground="#8b0000")
         self.result_tree.bind("<Double-1>", self._open_result)
-        self.result_tree.grid(row=9, column=0, columnspan=3, sticky="nsew")
-        self.log = tk.Text(run, height=8, state="disabled", wrap="word"); self.log.grid(row=10, column=0, columnspan=3, sticky="nsew", pady=(8, 0))
-        run.columnconfigure(2, weight=1); run.rowconfigure(9, weight=1); run.rowconfigure(10, weight=1)
+        self.result_tree.grid(row=10, column=0, columnspan=3, sticky="nsew")
+        self.log = tk.Text(run, height=7, state="disabled", wrap="word"); self.log.grid(row=11, column=0, columnspan=3, sticky="nsew", pady=(8, 0))
+        run.columnconfigure(2, weight=1); run.rowconfigure(10, weight=1); run.rowconfigure(11, weight=1)
+        self.company_count = tk.StringVar(value="0 empresas cadastradas")
+        ttk.Label(companies, textvariable=self.company_count, font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(0, 6))
         self.tree = ttk.Treeview(companies, columns=("cnpj", "name", "cert"), show="headings")
         for key, title, width in (("cnpj", "CNPJ", 130), ("name", "Razão social", 260), ("cert", "Certificado", 280)):
             self.tree.heading(key, text=title); self.tree.column(key, width=width)
@@ -106,7 +114,7 @@ class App(tk.Tk):
         bar = ttk.Frame(companies); bar.pack(fill="x", pady=8)
         ttk.Button(bar, text="Adicionar", command=self._company_dialog).pack(side="left")
         ttk.Button(bar, text="Editar", command=self._edit_company).pack(side="left", padx=6)
-        ttk.Button(bar, text="Importar SIEG + certificados…", command=self._bulk_import).pack(side="left", padx=6)
+        ttk.Button(bar, text="Importar…", command=self._import_companies).pack(side="left", padx=6)
         ttk.Button(bar, text="Excluir", command=self._delete).pack(side="left", padx=6)
         ttk.Label(config, text="Pasta raiz FISCAL do ano (exemplo: H:\\2026)").pack(anchor="w")
         line = ttk.Frame(config); line.pack(fill="x", pady=8)
@@ -149,6 +157,7 @@ class App(tk.Tk):
     def _refresh(self):
         for item in self.tree.get_children(): self.tree.delete(item)
         companies = self.db.companies()
+        self.company_count.set(f"{len(companies)} empresa(s) cadastrada(s)")
         for c in companies: self.tree.insert("", "end", iid=str(c.id), values=(c.cnpj, c.legal_name, c.certificate_path))
         choices = ["Todas as empresas"] + [f"{c.legal_name} — {c.cnpj}" for c in companies]
         self.company_combo.configure(values=choices)
@@ -168,50 +177,60 @@ class App(tk.Tk):
         if company:
             self._company_dialog(company)
 
-    def _bulk_import(self):
+    def _import_companies(self):
+        saved_sheet = self.db.setting("sieg_spreadsheet")
+        default_sheet = Path.home() / "OneDrive - Hiperion Contabil" / "Área de Trabalho" / "Cadastros-31-08-2026.xlsx"
+        suggested_sheet = Path(saved_sheet) if saved_sheet else default_sheet
         spreadsheet = filedialog.askopenfilename(
-            title="Selecione a planilha de cadastros do SIEG", filetypes=[("Planilha Excel", "*.xlsx")]
+            title="Importar — selecione a planilha Cadastros do SIEG",
+            initialdir=str(suggested_sheet.parent) if suggested_sheet.parent.is_dir() else None,
+            initialfile=suggested_sheet.name if suggested_sheet.is_file() else None,
+            filetypes=[("Planilha Excel do SIEG", "*.xlsx")],
         )
         if not spreadsheet:
             return
-        saved_root = self.db.setting("certificates_root")
-        default_root = Path(r"D:\01. LEGALIZAÇÃO\1. CERTIFICADORA\CERTIFICADOS")
-        initial = saved_root or (str(default_root) if default_root.is_dir() else "")
-        certificates_root = filedialog.askdirectory(
-            title="Selecione a pasta principal dos certificados A1", initialdir=initial or None
+        self.db.set_setting("sieg_spreadsheet", spreadsheet)
+        saved_root = self.db.setting("legalization_root")
+        default_root = Path(saved_root) if saved_root else Path.home() / "Hiperion Contabil" / "Hiperion Contabil Intranet - Documentos" / "LEGALIZAÇÃO"
+        selected_root = filedialog.askdirectory(
+            title="Importar — selecione a pasta LEGALIZAÇÃO",
+            initialdir=str(default_root) if default_root.is_dir() else None,
         )
-        if not certificates_root:
+        if not selected_root:
             return
-        self.db.set_setting("certificates_root", certificates_root)
+        self.db.set_setting("legalization_root", selected_root)
         try:
             companies = read_sieg_companies(Path(spreadsheet))
-            items = scan_certificates(Path(certificates_root), companies)
+            items = scan_legalization_certificates(Path(selected_root), companies)
+        except PermissionError:
+            messagebox.showerror(
+                "Importação",
+                "O Windows bloqueou a leitura da planilha. Feche o Excel e confirme que o arquivo está disponível offline no OneDrive.",
+            )
+            return
         except Exception as exc:
             messagebox.showerror("Importação", f"Não foi possível analisar os arquivos:\n{exc}")
             return
         ready = [item for item in items if item.status == "PRONTO"]
+        expired = sum(item.status == "VENCIDO" for item in items)
+        errors = sum(item.status == "ERRO" for item in items)
         if not messagebox.askyesno(
             "Conferir importação",
-            f"Empresas na planilha: {len(companies)}\nCertificados encontrados: {len(items)}\n"
-            f"Prontos para cadastrar: {len(ready)}\nCom pendência: {len(items) - len(ready)}\n\n"
-            "Cadastrar os itens prontos?",
+            f"Certificados válidos e mais recentes: {len(ready)}\n"
+            f"Vencidos: {expired}\nIlegíveis/senha inválida: {errors}\n"
+            f"Outras pendências: {len(items) - len(ready) - expired - errors}\n\n"
+            "Cadastrar somente os certificados prontos?",
         ):
             return
-        imported, duplicates = 0, set()
         for item in ready:
-            if item.cnpj in duplicates:
-                item.status, item.detail = "DUPLICADO", "mais de um certificado vinculado ao mesmo CNPJ"
-                continue
-            duplicates.add(item.cnpj)
             self.db.upsert_company(Company(None, item.cnpj, item.legal_name, item.certificate, protect(item.password)))
-            imported += 1
-        report = data_dir() / "relatorio-certificados.csv"
+        report = data_dir() / "relatorio-legalizacao.csv"
         write_report(report, items)
         self._refresh()
         messagebox.showinfo(
             "Importação concluída",
-            f"Cadastros incluídos/atualizados: {imported}\nPendências: {len(items) - imported}\n\n"
-            f"Relatório salvo em:\n{report}\n\nNenhuma senha foi gravada no relatório.",
+            f"Cadastros incluídos/atualizados: {len(ready)}\n\nRelatório salvo em:\n{report}\n\n"
+            "Foram ignorados certificados vencidos, ilegíveis e versões anteriores.",
         )
 
     def _company_dialog(self, company=None):
@@ -258,7 +277,7 @@ class App(tk.Tk):
         if not root.is_dir(): messagebox.showerror("Configuração", "Selecione uma raiz fiscal válida, por exemplo H:\\2026."); return
         if not companies: messagebox.showerror("Empresas", "A empresa selecionada não foi encontrada."); return
         for item in self.result_tree.get_children(): self.result_tree.delete(item)
-        self.result_records.clear(); self.show_errors_only = False; self.error_button.configure(text="Ver erros (0)")
+        self.result_records.clear(); self.show_errors_only = False; self.error_button.configure(text="Ver pendências (0)"); self._update_summary()
         self.run_button.state(["disabled"]); self.progress.configure(value=0, maximum=max(1, len(companies)))
         service = BatchService(SimulationProvider() if self.simulation.get() else AdnProvider(), self.logger)
         def status(done, total, text): self.events.put(("status", done, total, text))
@@ -274,12 +293,19 @@ class App(tk.Tk):
         for item in self.result_tree.get_children():
             self.result_tree.delete(item)
         labels = {"success": "Baixado", "empty": "Sem notas", "error": "Erro"}
-        errors = sum(record[2] == "error" for record in self.result_records)
+        pending = sum(record[2] in {"empty", "error"} for record in self.result_records)
         for cnpj, company, state, detail, _paths in self.result_records:
-            if self.show_errors_only and state != "error":
+            if self.show_errors_only and state not in {"empty", "error"}:
                 continue
             self.result_tree.insert("", "end", iid=cnpj, values=(company, labels[state], detail), tags=(state,))
-        self.error_button.configure(text=("Ver todos" if self.show_errors_only else f"Ver erros ({errors})"))
+        self.error_button.configure(text=("Ver todos" if self.show_errors_only else f"Ver pendências ({pending})"))
+        self._update_summary()
+
+    def _update_summary(self):
+        counts = {state: sum(record[2] == state for record in self.result_records) for state in ("success", "empty", "error")}
+        self.summary_vars["processed"].set(str(len(self.result_records)))
+        for state in ("success", "empty", "error"):
+            self.summary_vars[state].set(str(counts[state]))
 
     def _open_result(self, _event=None):
         selected = self.result_tree.selection()

@@ -2,7 +2,7 @@
 
 Aplicativo local em Python para selecionar uma competência e processar várias empresas sem interromper o lote quando uma delas falha.
 
-Versão atual: `1.2.1`.
+Versão atual: `1.4.0`.
 
 Desenvolvido por Guilherme Andrade dos Santos Trevisan para a Hiperion Assessoria Contábil.
 
@@ -11,13 +11,14 @@ Desenvolvido por Guilherme Andrade dos Santos Trevisan para a Hiperion Assessori
 O documento abaixo apresenta o design system, a arquitetura de software, os principais
 fluxogramas, a estrutura de pastas, os controles de segurança e o mapa de evolução do produto:
 
-- [Design system, arquitetura e fluxos - versão 1.2.1](output/pdf/NFSe-Hiperion-Design-Arquitetura-Fluxos-v1.2.1.pdf)
+- [Design system, arquitetura e fluxos - versão 1.4.0](output/pdf/NFSe-Hiperion-Design-Arquitetura-Fluxos-v1.4.0.pdf)
 
 ## O que já funciona
 
 - cadastro de empresas (CNPJ, razão social e certificado A1 `.pfx`/`.p12`);
 - edição do cadastro pelo botão **Editar** ou com dois cliques na empresa;
-- importação em lote da planilha de cadastros do SIEG e de uma pasta inteira de certificados;
+- botão único **Importar**, exclusivo da versão Hiperion, para cruzar a planilha SIEG com a árvore `LEGALIZAÇÃO`;
+- escolha automática do A1 válido mais recente por CNPJ, ignorando vencidos e versões anteriores;
 - leitura automática de `NUMERO BOX - RAZAO SOCIAL\CERTIFICADO DIGITAL\arquivo.pfx`;
 - descoberta da pasta `NUMERO BOX - RAZAO SOCIAL`, preferencialmente por um arquivo marcador de CNPJ;
 - destino fiscal: emitidas em `02. FISCAL\ARQUIVOS\SERVIÇOS\PRESTADOS\PORTAL NACIONAL\MM.AAAA` e recebidas em `...\TOMADOS\PORTAL NACIONAL\MM.AAAA`;
@@ -25,7 +26,7 @@ fluxogramas, a estrutura de pastas, os controles de segurança e o mapa de evolu
 - seleção independente entre `Emitidas / Prestados` e `Recebidas / Tomados`;
 - execução para todas as empresas ou somente uma empresa escolhida;
 - quadro final por empresa: verde para baixada e vermelho para sem notas/erro;
-- painel **Ver erros** com detalhes e caminho pesquisado;
+- dashboard com processadas, baixadas, sem notas, erros e filtro de pendências;
 - duplo clique em resultado concluído abre Tomados ou Prestados da competência;
 - dois cliques em uma empresa vermelha abrem o Portal Nacional para conferência manual;
 - banco SQLite local;
@@ -53,8 +54,7 @@ Requer Windows e Python 3.11 ou mais recente.
 
 1. Dê duplo clique em `executar.bat`.
 2. Em **Configurações**, escolha a raiz fiscal do ano, por exemplo `H:\2026`. Não escolha a pasta de Legalização onde estão os certificados.
-3. Em **Empresas**, use **Importar SIEG + certificados…** para cadastrar em lote. Selecione primeiro a planilha e depois a pasta que contém os PFX/P12. Para um cadastro isolado, continue usando **Adicionar**.
-   O programa pesquisa todas as subpastas e memoriza o caminho escolhido. Nos computadores da Hiperion, ele sugere `D:\01. LEGALIZAÇÃO\1. CERTIFICADORA\CERTIFICADOS` quando a pasta existe.
+3. Em **Empresas**, use **Importar…**. Selecione a planilha `Cadastros` exportada pelo SIEG e depois a raiz `LEGALIZAÇÃO` da intranet. O programa memoriza os dois caminhos e cadastra somente o certificado válido mais recente de cada CNPJ.
 4. Deixe **Modo simulação** marcado para o primeiro teste.
 5. Escolha mês/ano e selecione **Todas as empresas** ou uma empresa específica.
 6. Marque **Emitidas / Prestados**, **Recebidas / Tomados** ou ambas e inicie o download.

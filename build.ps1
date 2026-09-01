@@ -24,7 +24,7 @@ if (-not (Test-Path -LiteralPath $BuildPython)) {
 
 $Args = @(
     "--noconfirm", "--onefile", "--windowed",
-    "--name", "NFSe-Hiperion-1.2.1",
+    "--name", "NFSe-Hiperion-1.4.0",
     "--workpath", $WorkPath,
     "--distpath", $ReleasePath,
     "--specpath", $WorkPath,
@@ -41,6 +41,6 @@ if (Test-Path -LiteralPath $Icon) {
 
 & $BuildPython -m PyInstaller @Args
 if ($LASTEXITCODE -ne 0) { throw "Falha ao gerar o executável." }
-$Output = Join-Path $ReleasePath "NFSe-Hiperion-1.2.1.exe"
+$Output = Join-Path $ReleasePath "NFSe-Hiperion-1.4.0.exe"
 if (-not (Test-Path -LiteralPath $Output)) { throw "Executável final não encontrado." }
 Write-Host "Pacote gerado em: $Output"
