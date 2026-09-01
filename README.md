@@ -6,6 +6,13 @@ Versão atual: `1.2.1`.
 
 Desenvolvido por Guilherme Andrade dos Santos Trevisan para a Hiperion Assessoria Contábil.
 
+## Documentação do projeto
+
+O documento abaixo apresenta o design system, a arquitetura de software, os principais
+fluxogramas, a estrutura de pastas, os controles de segurança e o mapa de evolução do produto:
+
+- [Design system, arquitetura e fluxos - versão 1.2.1](output/pdf/NFSe-Hiperion-Design-Arquitetura-Fluxos-v1.2.1.pdf)
+
 ## O que já funciona
 
 - cadastro de empresas (CNPJ, razão social e certificado A1 `.pfx`/`.p12`);
