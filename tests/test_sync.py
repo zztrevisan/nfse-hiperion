@@ -91,6 +91,25 @@ class SyncTests(unittest.TestCase):
         self.assertTrue(client.calls[-2].startswith("https://adn.nfse.gov.br/contribuintes/DFe/3?"))
         self.assertTrue((base / "2026/10/Emitidas").is_dir())
 
+    def test_competence_filter_keeps_only_period_and_nsu(self):
+        items = [item(1, note(10, OWNER, "52998224725", "2026-08-15"), key="KEY1"),
+                 item(2, note(11, "52998224725", OWNER, "2026-09-03", "FORN X", "ACME SERVICOS LTDA")),
+                 item(3, EVENT, kind="EVENTO"),
+                 item(4, note(12, OWNER, "52998224725", "2026-10-01"))]
+        self.store.save_company(self.store.company(OWNER).__class__(OWNER, last_nsu=2))
+        client = FakeClient(items)
+        result = Syncer(client, self.store, self.root).run_one(OWNER, competence=("2026-08", "2026-08"))
+        self.assertEqual((result.status, result.new_files), ("ok", 2))
+        self.assertTrue(client.calls[0].startswith("https://adn.nfse.gov.br/contribuintes/DFe/0?"))
+        base = self.root / f"ACME SERVICOS LTDA - {OWNER}"
+        files = sorted(str(p.relative_to(base)).replace("\\", "/") for p in base.rglob("*.xml"))
+        self.assertEqual(files, ["2026/08/Emitidas/10_CLIENTE TESTE_1.xml",
+                                 "2026/08/Eventos/10_Cancelamento de NFS-e_3.xml"])
+        self.assertEqual(self.store.company(OWNER).last_nsu, 2)  # filtro não mexe no incremental
+
+        empty = Syncer(client, self.store, self.root).run_one(OWNER, competence=("2025-01", "2025-12"))
+        self.assertEqual(empty.status, "vazio")
+
     def test_own_certificate_does_not_send_cnpj_consulta(self):
         client = FakeClient([])
         client.owner = OWNER

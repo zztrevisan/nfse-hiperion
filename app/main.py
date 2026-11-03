@@ -120,15 +120,34 @@ class App(tk.Tk):
 
         # 4. Ações
         act = ttk.Frame(body); act.grid(row=3, column=0, sticky="ew", pady=(8, 0)); act.columnconfigure(3, weight=1)
+        comp = ttk.Frame(act); comp.grid(row=0, column=0, columnspan=5, sticky="w", pady=(0, 6))
+        prev = date.today().replace(day=1).toordinal() - 1  # competência padrão: mês anterior
+        prev = date.fromordinal(prev)
+        self.by_competence = tk.BooleanVar(value=False)
+        self.comp_vars = [tk.IntVar(value=prev.month), tk.IntVar(value=prev.year),
+                          tk.IntVar(value=prev.month), tk.IntVar(value=prev.year)]
+        ttk.Checkbutton(comp, text="Só a competência", variable=self.by_competence,
+                        command=self._toggle_competence).pack(side="left")
+        self.comp_widgets = []
+        for label, (m, y) in (("de", self.comp_vars[:2]), ("até", self.comp_vars[2:])):
+            ttk.Label(comp, text=label).pack(side="left", padx=(10, 4))
+            for var, lo, hi, width in ((m, 1, 12, 4), (y, 2020, 2100, 6)):
+                box = ttk.Spinbox(comp, from_=lo, to=hi, width=width, textvariable=var)
+                box.pack(side="left", padx=1); self.comp_widgets.append(box)
+        self.comp_hint = ttk.Label(comp, text="Sem marcar: baixa tudo o que entrou desde a última vez.", foreground="#555")
+        self.comp_hint.pack(side="left", padx=10)
+        self._toggle_competence()
+
         self.from_zero = tk.BooleanVar(value=False)
         self.run_button = ttk.Button(act, text="Baixar XMLs", command=self._start)
-        self.run_button.grid(row=0, column=0)
+        self.run_button.grid(row=1, column=0)
         self.stop_button = ttk.Button(act, text="Parar", command=self._stop, state="disabled")
-        self.stop_button.grid(row=0, column=1, padx=6)
-        ttk.Checkbutton(act, text="Baixar tudo de novo (ignora o último NSU)", variable=self.from_zero).grid(row=0, column=2, padx=6)
-        ttk.Button(act, text="Procuração no e-CAC", command=lambda: webbrowser.open(ECAC_PROCURACAO)).grid(row=0, column=4)
-        self.progress = ttk.Progressbar(act, maximum=1); self.progress.grid(row=1, column=0, columnspan=5, sticky="ew", pady=(8, 2))
-        self.status = ttk.Label(act, text="Pronto"); self.status.grid(row=2, column=0, columnspan=5, sticky="w")
+        self.stop_button.grid(row=1, column=1, padx=6)
+        self.from_zero_box = ttk.Checkbutton(act, text="Baixar tudo de novo (ignora o último NSU)", variable=self.from_zero)
+        self.from_zero_box.grid(row=1, column=2, padx=6)
+        ttk.Button(act, text="Procuração no e-CAC", command=lambda: webbrowser.open(ECAC_PROCURACAO)).grid(row=1, column=4)
+        self.progress = ttk.Progressbar(act, maximum=1); self.progress.grid(row=2, column=0, columnspan=5, sticky="ew", pady=(8, 2))
+        self.status = ttk.Label(act, text="Pronto"); self.status.grid(row=3, column=0, columnspan=5, sticky="w")
 
         self.log = tk.Text(body, height=6, state="disabled", wrap="word", font=("Consolas", 9))
         self.log.grid(row=4, column=0, sticky="nsew", pady=(6, 0))
@@ -160,6 +179,23 @@ class App(tk.Tk):
     def _choose_root(self):
         path = filedialog.askdirectory(title="Pasta onde salvar as notas", initialdir=self.root_path.get() or None)
         if path: self.root_path.set(path)
+
+    def _toggle_competence(self):
+        on = self.by_competence.get()
+        for box in self.comp_widgets: box.configure(state="normal" if on else "disabled")
+        if hasattr(self, "from_zero_box"): self.from_zero_box.configure(state="disabled" if on else "normal")
+        self.comp_hint.configure(text="Lê a caixa inteira e salva só as notas desse período (não mexe no último NSU)."
+                                 if on else "Sem marcar: baixa tudo o que entrou desde a última vez.")
+
+    def _competence(self):
+        """("AAAA-MM", "AAAA-MM") ou None; levanta ValueError se o período for inválido."""
+        if not self.by_competence.get(): return None
+        try: m1, y1, m2, y2 = (int(v.get()) for v in self.comp_vars)
+        except (tk.TclError, ValueError): raise ValueError("Preencha mês e ano da competência.")
+        if not (1 <= m1 <= 12 and 1 <= m2 <= 12): raise ValueError("Mês deve ser de 1 a 12.")
+        lo, hi = f"{y1:04d}-{m1:02d}", f"{y2:04d}-{m2:02d}"
+        if lo > hi: raise ValueError("A competência inicial é depois da final.")
+        return lo, hi
 
     def _test_cert(self):
         try:
@@ -206,6 +242,8 @@ class App(tk.Tk):
         root = self.root_path.get().strip()
         if not docs: messagebox.showwarning("Lista vazia", "Digite ou importe pelo menos um CNPJ."); return
         if not root: messagebox.showwarning("Pasta", "Escolha a pasta onde salvar."); return
+        try: competence = self._competence()
+        except ValueError as exc: messagebox.showwarning("Competência", str(exc)); return
         try:
             context, info = certificate.load(Path(self.cert_path.get().strip()), self.cert_pass.get())
         except RuntimeError as exc:
@@ -213,14 +251,15 @@ class App(tk.Tk):
         self._test_cert()
         Path(root).mkdir(parents=True, exist_ok=True)
         self._save(docs)
-        if self.from_zero.get() and not messagebox.askyesno(
+        if not competence and self.from_zero.get() and not messagebox.askyesno(
                 "Baixar tudo de novo", "Vai baixar a caixa inteira de cada empresa desde o NSU 0. Pode demorar. Continuar?"):
             return
         self.stop_flag.clear()
         self.run_button.configure(state="disabled"); self.stop_button.configure(state="normal")
         self.progress.configure(maximum=len(docs), value=0)
         for d in docs: self._row(d, status="fila", new="", msg="")
-        self._log(f"Certificado: {info.holder} ({fmt(info.document)}) — {len(docs)} empresa(s)")
+        period = f" — competência {competence[0]} a {competence[1]}" if competence else ""
+        self._log(f"Certificado: {info.holder} ({fmt(info.document)}) — {len(docs)} empresa(s){period}")
         syncer = Syncer(AdnClient(context, info.document), self.store, Path(root),
                         cancelled=self.stop_flag.is_set)
         from_zero = self.from_zero.get()
@@ -230,7 +269,8 @@ class App(tk.Tk):
             for i, d in enumerate(docs):
                 if self.stop_flag.is_set(): break
                 self.events.put(("start", d, i))
-                result = syncer.run_one(d, from_zero, progress=lambda n, d=d: self.events.put(("count", d, n)))
+                result = syncer.run_one(d, from_zero, progress=lambda n, d=d: self.events.put(("count", d, n)),
+                                        competence=competence)
                 totals[result.status] = totals.get(result.status, 0) + 1
                 self.events.put(("result", result, i + 1))
             self.events.put(("done", totals))

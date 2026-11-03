@@ -61,9 +61,10 @@ class Store:
             (c.document, c.name, c.folder, c.last_nsu, c.last_sync))
         self.db.commit()
 
-    def checkpoint(self, c: Company, nsu: int, notes: list[tuple[str, str, str]]) -> None:
-        """Grava o NSU do lote e as notas dele na mesma transação."""
-        c.last_nsu, c.last_sync = nsu, datetime.now().isoformat(timespec="seconds")
+    def checkpoint(self, c: Company, nsu: int | None, notes: list[tuple[str, str, str]]) -> None:
+        """Grava o NSU do lote e as notas dele na mesma transação (nsu=None mantém o NSU salvo)."""
+        if nsu is not None:
+            c.last_nsu, c.last_sync = nsu, datetime.now().isoformat(timespec="seconds")
         with self.db:
             self.db.executemany("INSERT OR REPLACE INTO notes VALUES(?,?,?,?)",
                                 [(c.document, key, rel, num) for key, rel, num in notes])

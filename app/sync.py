@@ -45,9 +45,15 @@ class Syncer:
         self.client, self.store, self.root, self.log, self.cancelled = client, store, Path(root), log, cancelled
 
     def run_one(self, document: str, from_zero: bool = False,
-                progress: Callable[[int], None] = lambda n: None) -> Result:
+                progress: Callable[[int], None] = lambda n: None,
+                competence: tuple[str, str] | None = None) -> Result:
+        """competence=("AAAA-MM", "AAAA-MM"): grava só as notas desse intervalo.
+
+        Com filtro a caixa é lida desde o NSU 0 e o último NSU salvo não muda — senão
+        as notas de fora do intervalo seriam puladas para sempre no modo incremental.
+        """
         c = self.store.company(document)
-        start = 0 if from_zero else c.last_nsu
+        start = 0 if from_zero or competence else c.last_nsu
         written = 0
         try:
             for highest, docs in self.client.batches(document, start, self.cancelled):
@@ -64,13 +70,15 @@ class Syncer:
                 notes = []
                 for d in docs:
                     rel, filename, note = self._place(document, d)
+                    if note:
+                        notes.append(note)
+                    if competence and not competence[0] <= "-".join(Path(rel).parts[:2]) <= competence[1]:
+                        continue
                     target = base / rel
                     target.mkdir(parents=True, exist_ok=True)
                     (target / filename).write_bytes(d.xml)
                     written += 1
-                    if note:
-                        notes.append(note)
-                self.store.checkpoint(c, highest, notes)
+                self.store.checkpoint(c, None if competence else highest, notes)
                 progress(written)
             if self.cancelled():
                 return Result(document, "cancelado", written, f"interrompido no NSU {c.last_nsu}", c.folder)
@@ -81,10 +89,14 @@ class Syncer:
             return Result(document, "erro", written, str(exc), c.folder)
         except Exception as exc:  # XML quebrado, disco cheio etc.: registra e segue para a próxima empresa
             return Result(document, "erro", written, f"{type(exc).__name__}: {exc}", c.folder)
-        if not c.last_sync:  # caixa vazia: marca a consulta mesmo sem documentos
+        if not c.last_sync and not competence:  # caixa vazia: marca a consulta mesmo sem documentos
             self.store.checkpoint(c, c.last_nsu, [])
         status = "ok" if written else "vazio"
-        msg = f"{written} arquivo(s) novo(s), último NSU {c.last_nsu}" if written else "nada novo"
+        if competence:
+            period = competence[0] if competence[0] == competence[1] else f"{competence[0]} a {competence[1]}"
+            msg = f"{written} arquivo(s) da competência {period}" if written else f"nada na competência {period}"
+        else:
+            msg = f"{written} arquivo(s) novo(s), último NSU {c.last_nsu}" if written else "nada novo"
         return Result(document, status, written, msg, c.folder)
 
     def _place(self, owner: str, d) -> tuple[str, str, tuple[str, str, str] | None]:

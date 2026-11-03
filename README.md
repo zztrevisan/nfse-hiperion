@@ -22,7 +22,9 @@ Versão atual: `2.0.0`. Desenvolvido por Guilherme Andrade dos Santos Trevisan p
 2. Escolha a pasta de destino.
 3. Digite os CNPJ (um por linha) ou clique em **Importar TXT**. Aceita CNPJ numérico, alfanumérico e CPF,
    com ou sem pontuação, e linhas com nome junto. Os inválidos (dígito verificador) são apontados e ignorados.
-4. Clique em **Baixar XMLs**. Dois cliques numa empresa abrem a pasta dela.
+4. Opcional: marque **Só a competência** e escolha o período (de/até, padrão mês anterior). A caixa é lida
+   inteira e só as notas desse período são salvas; o último NSU salvo não muda, então o modo incremental continua certo.
+5. Clique em **Baixar XMLs**. Dois cliques numa empresa abrem a pasta dela.
 
 ## Estrutura das pastas
 
