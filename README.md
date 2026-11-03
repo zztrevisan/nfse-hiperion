@@ -1,97 +1,59 @@
-# NFS-e em lote — MVP local para Windows
+# NFS-e em lote — Hiperion
 
-Aplicativo local em Python para selecionar uma competência e processar várias empresas sem interromper o lote quando uma delas falha.
+Aplicativo Windows que baixa os XML de NFS-e de **várias empresas usando um único certificado A1**
+(o do contador/procurador) pela API oficial de distribuição do ADN (NFS-e Nacional), e organiza tudo
+em pastas por empresa e data.
 
-Versão atual: `1.4.0`.
+Versão atual: `2.0.0`. Desenvolvido por Guilherme Andrade dos Santos Trevisan para a Hiperion Assessoria Contábil.
 
-Desenvolvido por Guilherme Andrade dos Santos Trevisan para a Hiperion Assessoria Contábil.
+## Como funciona
 
-## Documentação do projeto
+- Conexão mTLS com `https://adn.nfse.gov.br/contribuintes/DFe/{NSU}?lote=true&cnpjConsulta={CNPJ}`.
+- O parâmetro `cnpjConsulta` (ou `cpfConsulta`) faz o certificado conectado consultar outra inscrição.
+  O ADN só responde se a empresa tiver dado **procuração eletrônica no e-CAC** ao titular do certificado
+  (ou se for filial do CNPJ do certificado). Sem procuração, a empresa aparece em amarelo e o lote continua.
+- O download é **incremental**: o último NSU de cada empresa fica salvo, e a próxima execução só traz o que
+  é novo. A opção "Baixar tudo de novo" recomeça do NSU 0.
+- O NSU só é salvo depois que os arquivos do lote foram gravados — se cair no meio, nada se perde.
 
-O documento abaixo apresenta o design system, a arquitetura de software, os principais
-fluxogramas, a estrutura de pastas, os controles de segurança e o mapa de evolução do produto:
+## Uso
 
-- [Design system, arquitetura e fluxos - versão 1.4.0](output/pdf/NFSe-Hiperion-Design-Arquitetura-Fluxos-v1.4.0.pdf)
+1. Escolha o certificado A1 (`.pfx`/`.p12`) do procurador e digite a senha (pode ser lembrada; fica protegida pelo DPAPI do Windows).
+2. Escolha a pasta de destino.
+3. Digite os CNPJ (um por linha) ou clique em **Importar TXT**. Aceita CNPJ numérico, alfanumérico e CPF,
+   com ou sem pontuação, e linhas com nome junto. Os inválidos (dígito verificador) são apontados e ignorados.
+4. Clique em **Baixar XMLs**. Dois cliques numa empresa abrem a pasta dela.
 
-## O que já funciona
+## Estrutura das pastas
 
-- cadastro de empresas (CNPJ, razão social e certificado A1 `.pfx`/`.p12`);
-- edição do cadastro pelo botão **Editar** ou com dois cliques na empresa;
-- botão único **Importar**, exclusivo da versão Hiperion, para cruzar a planilha SIEG com a árvore `LEGALIZAÇÃO`;
-- escolha automática do A1 válido mais recente por CNPJ, ignorando vencidos e versões anteriores;
-- leitura automática de `NUMERO BOX - RAZAO SOCIAL\CERTIFICADO DIGITAL\arquivo.pfx`;
-- descoberta da pasta `NUMERO BOX - RAZAO SOCIAL`, preferencialmente por um arquivo marcador de CNPJ;
-- destino fiscal: emitidas em `02. FISCAL\ARQUIVOS\SERVIÇOS\PRESTADOS\PORTAL NACIONAL\MM.AAAA` e recebidas em `...\TOMADOS\PORTAL NACIONAL\MM.AAAA`;
-- fila com progresso, log na tela e relatório final;
-- seleção independente entre `Emitidas / Prestados` e `Recebidas / Tomados`;
-- execução para todas as empresas ou somente uma empresa escolhida;
-- quadro final por empresa: verde para baixada e vermelho para sem notas/erro;
-- dashboard com processadas, baixadas, sem notas, erros e filtro de pendências;
-- duplo clique em resultado concluído abre Tomados ou Prestados da competência;
-- dois cliques em uma empresa vermelha abrem o Portal Nacional para conferência manual;
-- banco SQLite local;
-- senha do A1 protegida pelo DPAPI do Windows — nunca gravada em texto puro;
-- modo de simulação, que valida cadastro/pastas e cria arquivos demonstrativos claramente identificados;
-- integração ADN por certificado A1/mTLS, paginação por NSU e filtro local por competência;
-- eventos de cancelamento, substituição e manifestação dentro de `MM.AAAA\Eventos`;
-
-## Antes da integração real: dados necessários
-
-Preencha `LEVANTAMENTO_API.md`. Em particular, ainda são necessários:
-
-1. teste controlado do mTLS com um A1 cadastrado localmente;
-2. decisão do NSU inicial na primeira sincronização (zero ou último NSU conhecido);
-3. regra final das pastas de canceladas/substituídas;
-4. alcance da confirmação de duplicidade: arquivo, empresa ou lote.
-
-Não informe senhas em documentos ou mensagens. Na importação em lote, o aplicativo
-lê o trecho `Senha ...` do nome do PFX/P12; quando não existe, usa o padrão `1234`.
-A senha é imediatamente protegida pelo Windows e nunca aparece no relatório gerado.
-
-## Como executar
-
-Requer Windows e Python 3.11 ou mais recente.
-
-1. Dê duplo clique em `executar.bat`.
-2. Em **Configurações**, escolha a raiz fiscal do ano, por exemplo `H:\2026`. Não escolha a pasta de Legalização onde estão os certificados.
-3. Em **Empresas**, use **Importar…**. Selecione a planilha `Cadastros` exportada pelo SIEG e depois a raiz `LEGALIZAÇÃO` da intranet. O programa memoriza os dois caminhos e cadastra somente o certificado válido mais recente de cada CNPJ.
-4. Deixe **Modo simulação** marcado para o primeiro teste.
-5. Escolha mês/ano e selecione **Todas as empresas** ou uma empresa específica.
-6. Marque **Emitidas / Prestados**, **Recebidas / Tomados** ou ambas e inicie o download.
-
-O banco fica em `%LOCALAPPDATA%\NFSeLote\nfse.db` e os logs em `%LOCALAPPDATA%\NFSeLote\logs`.
-
-Ao final da importação, o arquivo `%LOCALAPPDATA%\NFSeLote\relatorio-certificados.csv`
-lista certificados cadastrados, duplicados e pendências. Ele registra apenas a origem
-da senha (nome do arquivo ou padrão), nunca a senha em si.
-
-### Mapeamento seguro por CNPJ
-
-Como o CNPJ normalmente não aparece no nome `NUMERO BOX - RAZAO SOCIAL`, o app cria, após a primeira confirmação, um arquivo `.nfse-cnpj` dentro da pasta do cliente. Nas execuções seguintes esse marcador tem prioridade. Quando ainda não existe marcador, o app tenta uma correspondência normalizada e inequívoca da razão social. Se houver ambiguidade, a empresa falha sem arriscar gravar na pasta errada.
-
-### Destino confirmado
-
-Para a competência julho de 2026, por exemplo:
-
-```text
-023 - EMPRESA\02. FISCAL\ARQUIVOS\SERVIÇOS\PRESTADOS\PORTAL NACIONAL\07.2026
-023 - EMPRESA\02. FISCAL\ARQUIVOS\SERVIÇOS\TOMADOS\PORTAL NACIONAL\07.2026
+```
+<pasta escolhida>\
+  RAZAO SOCIAL - 11222333000181\
+    2026\
+      08\
+        Emitidas\   10_CLIENTE TESTE_1.xml        (número_contraparte_NSU)
+        Recebidas\
+        Eventos\    10_Cancelamento de NFS-e_3.xml
+        Outros\     (notas em que a empresa não é prestador nem tomador, ex.: intermediário)
 ```
 
-Depois de localizar com segurança a pasta da empresa em `H:\2026`, o programa cria a estrutura fiscal que estiver faltando, inclusive `PORTAL NACIONAL\MM.AAAA`. `PRESTADOS` recebe as NFS-e emitidas; `TOMADOS`, as recebidas.
+A data é a **competência** da nota (`dCompet`; se faltar, a emissão). O evento (cancelamento,
+substituição etc.) vai para o mês da nota a que se refere.
 
-Quando houver cancelamento, substituição ou manifestação, o XML do evento recebe um nome legível e fica em `PORTAL NACIONAL\MM.AAAA\Eventos`, dentro do lado correspondente à nota original.
+## Arquivos do projeto
 
-Quando a consulta retornar zero documentos, a pasta da competência não é criada. A empresa aparece como **Sem notas** em vermelho e pode ser aberta com dois cliques no Portal Nacional para o funcionário conferir e registrar o print.
+| Arquivo | Função |
+|---|---|
+| `app/main.py` | Interface (tkinter) |
+| `app/adn.py` | Cliente da API ADN e leitura dos XML |
+| `app/certificate.py` | Abre o A1 e monta o contexto mTLS |
+| `app/sync.py` | Baixa a caixa de cada empresa e grava nas pastas |
+| `app/store.py` | SQLite em `%LOCALAPPDATA%\NFSeHiperion` (configurações, NSU por empresa, índice de notas) |
+| `app/documents.py` | Leitura da lista e validação de CNPJ/CPF |
+| `app/security.py` | DPAPI para a senha |
 
-## Testes
+## Rodar e empacotar
 
-Na pasta do projeto:
-
-```powershell
-python -m unittest discover -s tests -v
-```
-
-## Limite intencional do MVP
-
-O primeiro download real começa no NSU 0 para garantir a competência selecionada e pode demorar. O cursor incremental por CNPJ será habilitado depois do teste controlado, mantendo a possibilidade de consultar competências retroativas.
+- Rodar: `executar.bat`
+- Testes: `.venv\Scripts\python -m unittest discover -s tests -v`
+- Gerar `.exe`: `powershell -ExecutionPolicy Bypass -File build.ps1` → `release\NFSe-Hiperion-2.0.0.exe`
