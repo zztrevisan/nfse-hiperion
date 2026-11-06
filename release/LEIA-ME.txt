@@ -1,17 +1,21 @@
-NFS-e HIPERION - VERSAO 1.4.0
+NFS-e HIPERION - VERSAO 2.0.0 (TESTE)
 
-1. Copie NFSe-Hiperion-1.4.0.exe para o computador do funcionario.
-2. Abra o executavel. Nao e necessario instalar Python.
-3. Na primeira abertura, selecione a raiz fiscal do ano (normalmente H:\2026).
-4. Na aba Empresas, use o botao unico "Importar".
-5. Selecione a planilha Cadastros do SIEG e depois a raiz LEGALIZACAO da intranet.
-6. Confira o relatorio de certificados e corrija somente as pendencias.
-7. O aplicativo escolhe somente o A1 valido mais recente por CNPJ.
+1. Copie NFSe-Hiperion-2.0.0.exe para o computador. Nao precisa instalar nada.
+2. Se o Windows mostrar "O Windows protegeu o computador", clique em
+   "Mais informacoes" > "Executar assim mesmo".
+3. Certificado: escolha o A1 (.pfx) do escritorio/procurador, digite a senha e clique em Testar.
+4. Pasta: escolha onde salvar as notas.
+5. CNPJ: digite um por linha ou clique em "Importar TXT".
+6. Opcional: marque "So a competencia" e escolha o periodo.
+7. Clique em "Baixar XMLs".
 
-Cada usuario do Windows possui seu proprio cadastro protegido em:
-%LOCALAPPDATA%\NFSeLote
+Cores do resultado:
+  Verde    = baixou notas
+  Cinza    = nada novo
+  Amarelo  = sem procuracao: a empresa precisa cadastrar procuracao no e-CAC
+  Vermelho = erro (anote a mensagem do Detalhe)
 
-O usuario precisa ter acesso a unidade H: e a internet.
+Pastas: EMPRESA - CNPJ \ Ano \ Mes \ Emitidas | Recebidas | Eventos
 
-Versao: 1.4.0
-SHA-256: 306D69C55E86FF74385E6CEED734ADED340740E16757BFFE67F9BF3DE476ED90
+Log para mandar em caso de erro:
+%LOCALAPPDATA%\NFSeHiperion\logs

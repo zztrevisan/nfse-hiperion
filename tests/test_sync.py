@@ -57,6 +57,28 @@ class ParseTests(unittest.TestCase):
         self.assertEqual((ev.note_key, ev.description, ev.date), ("KEY1", "Cancelamento de NFS-e", "2026-09-02"))
 
 
+class FetchErrorTests(unittest.TestCase):
+    def _http(self, code, body):
+        import io, urllib.error
+        from unittest import mock
+        err = urllib.error.HTTPError("u", code, "x", {}, io.BytesIO(body.encode()))
+        return mock.patch("urllib.request.urlopen", side_effect=err)
+
+    def test_end_of_box_404_is_not_no_proxy(self):
+        body = ('{"StatusProcessamento":"NENHUM_DOCUMENTO_LOCALIZADO","TipoAmbiente":"PRODUCAO",'
+                '"ProcuradorInformado":null,"Erros":[{"Descricao":"Nenhum documento localizado - não existem '
+                'documentos fiscais para o Contribuinte a partir do NSU informado."}]}')
+        client = AdnClient(None); client.delay = 0
+        with self._http(404, body):
+            self.assertIsNone(client.fetch(5, OWNER))
+
+    def test_no_proxy_description(self):
+        body = '{"Erros":[{"Descricao":"Não há procuração da inscrição 1 para a inscrição 2"}]}'
+        client = AdnClient(None); client.delay = 0
+        with self._http(403, body):
+            self.assertRaises(NoProxyError, client.fetch, 0, OWNER)
+
+
 class SyncTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

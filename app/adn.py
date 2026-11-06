@@ -88,11 +88,13 @@ class AdnClient:
                     return json.loads(response.read().decode("utf-8"))
             except urllib.error.HTTPError as exc:
                 body = exc.read().decode("utf-8", errors="replace")
-                if exc.code == 404 and "procura" not in body.lower():
-                    return None
                 last_error = _error_text(exc.code, body)
-                if "procura" in body.lower():
+                # Decide só pela descrição do erro: o corpo do 404 de "fim da caixa" também
+                # tem campos com "procura…" e não significa falta de procuração.
+                if "procura" in last_error.lower():
                     raise NoProxyError(last_error) from exc
+                if exc.code == 404:
+                    return None
                 if exc.code not in TRANSIENT:
                     raise AdnError(last_error) from exc
                 retry = exc.headers.get("Retry-After", "")

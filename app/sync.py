@@ -84,7 +84,7 @@ class Syncer:
                 return Result(document, "cancelado", written, f"interrompido no NSU {c.last_nsu}", c.folder)
         except NoProxyError as exc:
             return Result(document, "sem_procuracao", written,
-                          f"sem procuração para o certificado — cadastrar no e-CAC ({exc})", c.folder)
+                          f"cadastrar no e-CAC ({exc})", c.folder)
         except AdnError as exc:
             return Result(document, "erro", written, str(exc), c.folder)
         except Exception as exc:  # XML quebrado, disco cheio etc.: registra e segue para a próxima empresa
