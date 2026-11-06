@@ -24,7 +24,11 @@ Versão atual: `2.0.0`. Desenvolvido por Guilherme Andrade dos Santos Trevisan p
    com ou sem pontuação, e linhas com nome junto. Os inválidos (dígito verificador) são apontados e ignorados.
 4. Opcional: marque **Só a competência** e escolha o período (de/até, padrão mês anterior). A caixa é lida
    inteira e só as notas desse período são salvas; o último NSU salvo não muda, então o modo incremental continua certo.
-5. Clique em **Baixar XMLs**. Dois cliques numa empresa abrem a pasta dela.
+5. Clique em **Baixar XMLs**.
+6. **Relatório de faturamento**: usa o período de/até e os XML já baixados na pasta (filtra pelas empresas
+   da lista, se houver). Gera um Excel com a aba **Resumo** (por empresa e mês: quantidade e valor de saídas,
+   ISS das saídas, entradas, ISS retido nas entradas, saídas − entradas, canceladas e linha de total) e a aba
+   **Notas** (detalhe nota a nota). Canceladas/substituídas aparecem no detalhe, mas não somam. Dois cliques numa empresa abrem a pasta dela.
 
 ## Estrutura das pastas
 

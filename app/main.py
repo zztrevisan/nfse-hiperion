@@ -8,8 +8,11 @@ from datetime import date
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+import tkinter.font as tkfont
 
-from . import certificate
+import sv_ttk
+
+from . import certificate, report
 from .adn import AdnClient
 from .documents import fmt, parse_list
 from .security import protect, unprotect
@@ -17,6 +20,32 @@ from .store import Store, data_dir
 from .sync import Syncer
 from .version import APP_NAME, APP_VERSION
 
+PALETTES = {
+    "light": dict(BRAND="#1f4e79", INK="#1f2937", MUTED="#6b7280", LINE="#c3ccd6", SIDE="#f3f6f9",
+                  CARD="#ffffff", FIELD="#ffffff", LOGBG="#f6f8fa",
+                  GREEN="#1e7a3c", AMBER="#b7791f", RED="#c0392b", BLUE="#1a3d7c",
+                  ROWS={"ok": ("#d3eedb", "#14532d"), "vazio": ("#ffffff", "#4b5563"),
+                        "sem_procuracao": ("#ffecb8", "#7a4b00"), "erro": ("#f9d4d4", "#8b1a1a"),
+                        "cancelado": ("#f1f3f5", "#4b5563"), "rodando": ("#d2e3fc", "#1a3d7c"),
+                        "fila": ("#ffffff", "#6b7280")}),
+    "dark": dict(BRAND="#16324f", INK="#e6e8eb", MUTED="#9aa3ad", LINE="#4a5058", SIDE="#23272c",
+                 CARD="#2b3036", FIELD="#1e2125", LOGBG="#1a1d21",
+                 GREEN="#5cc98a", AMBER="#e8b45a", RED="#f07b6f", BLUE="#8fb4f5",
+                 ROWS={"ok": ("#1f3a2a", "#b9f0cf"), "vazio": ("#1c1c1c", "#c3c9d0"),
+                       "sem_procuracao": ("#3d3217", "#f5d796"), "erro": ("#45211f", "#ffc2bb"),
+                       "cancelado": ("#26292d", "#c3c9d0"), "rodando": ("#1e2f4d", "#bcd3ff"),
+                       "fila": ("#1c1c1c", "#9aa3ad")}),
+}
+BRAND = INK = MUTED = LINE = SIDE = CARD = FIELD = LOGBG = GREEN = AMBER = RED = BLUE = ""
+ROWS: dict = {}
+
+
+def set_palette(name: str) -> None:
+    globals().update(PALETTES[name])
+
+
+set_palette("light")
+UI_FONT = ["Segoe UI"]  # trocada em _build se a máquina não tiver a Segoe UI
 ECAC_PROCURACAO = "https://cav.receita.fazenda.gov.br/ecac/"
 STATUS_LABEL = {"ok": "Baixado", "vazio": "Nada novo", "sem_procuracao": "Sem procuração",
                 "erro": "Erro", "cancelado": "Cancelado", "fila": "Na fila", "rodando": "Baixando…"}
@@ -30,7 +59,7 @@ def resource_path(relative: str) -> Path:
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title(f"{APP_NAME} — {APP_VERSION}"); self.geometry("980x780"); self.minsize(820, 640)
+        self.title(f"{APP_NAME} — {APP_VERSION}"); self.geometry("1240x800"); self.minsize(1080, 680)
         icon = resource_path("assets/app.ico")
         if icon.is_file():
             try: self.iconbitmap(str(icon))
@@ -38,7 +67,8 @@ class App(tk.Tk):
         self.store, self.events = Store(), queue.Queue()
         self.worker, self.stop_flag = None, threading.Event()
         self.logger = self._make_logger()
-        self._build(); self._load(); self.after(100, self._drain)
+        self.theme = self.store.get("theme", "light") if self.store.get("theme") in PALETTES else "light"
+        self._build(); self._load(); self.after(100, self._drain); self.after(300, self._keep_opaque)
         self.protocol("WM_DELETE_WINDOW", self._close)
 
     def _make_logger(self):
@@ -51,108 +81,274 @@ class App(tk.Tk):
 
     # ── Tela ────────────────────────────────────────────────────────────────
     def _build(self):
-        header = ttk.Frame(self, padding=(12, 8, 12, 0)); header.pack(fill="x")
-        logo = resource_path("assets/logo-header.png")
-        if logo.is_file():
-            self.logo_image = tk.PhotoImage(file=str(logo))
-            ttk.Label(header, image=self.logo_image).pack(side="left")
-        title = ttk.Frame(header); title.pack(side="left", padx=14)
-        ttk.Label(title, text="NFS-e em lote", font=("Segoe UI", 18, "bold")).pack(anchor="w")
-        ttk.Label(title, text="Um certificado, várias empresas — procuração eletrônica no ADN",
-                  font=("Segoe UI", 10)).pack(anchor="w")
+        families = set(tkfont.families(self))
+        UI_FONT[0] = next((f for f in ("Segoe UI Variable Text", "Segoe UI", "Calibri", "Arial")
+                           if f in families), "TkDefaultFont")
+        set_palette(self.theme)
+        sv_ttk.set_theme(self.theme)
+        for name in ("TkDefaultFont", "TkTextFont", "TkHeadingFont", "TkMenuFont", "SunValleyBodyFont",
+                     "SunValleyBodyStrongFont", "SunValleyCaptionFont"):
+            try: tkfont.nametofont(name, self).configure(family=UI_FONT[0])
+            except tk.TclError: pass
+        style = ttk.Style(self)
+        style.configure(".", font=(UI_FONT[0], 10))
+        style.configure("Side.TFrame", background=SIDE)
+        style.configure("Side.TLabel", background=SIDE)
+        style.configure("SideTitle.TLabel", background=SIDE, font=(UI_FONT[0], 10, "bold"), foreground=INK)
+        style.configure("SideHint.TLabel", background=SIDE, foreground=MUTED, font=(UI_FONT[0], 9))
+        style.configure("Side.TCheckbutton", background=SIDE)
+        style.configure("Treeview", rowheight=28)
+        style.configure("Treeview.Heading", font=(UI_FONT[0], 9, "bold"))
+        style.configure("Big.Accent.TButton", font=(UI_FONT[0], 11, "bold"), padding=(22, 8))
+        # Tk 8.6 + tema com imagens: sem isso o fundo das tags da Treeview é ignorado (só a cor do texto aparece).
+        style.map("Treeview", background=[("selected", "#2f6fb5")], foreground=[("selected", "#ffffff")])
+        self.configure(bg=CARD)
 
-        body = ttk.Frame(self, padding=12); body.pack(fill="both", expand=True)
-        body.columnconfigure(0, weight=1)
+        # Cabeçalho
+        header = tk.Frame(self, bg=BRAND, height=68); header.pack(fill="x"); header.pack_propagate(False)
+        badge = resource_path("assets/logo-badge.png")
+        if badge.is_file():
+            self.logo_image = tk.PhotoImage(file=str(badge))
+            tk.Label(header, image=self.logo_image, bg=BRAND).pack(side="left", padx=(16, 0))
+        tk.Label(header, text="NFS-e em lote", bg=BRAND, fg="white",
+                 font=(UI_FONT[0], 16, "bold")).pack(side="left", padx=(14, 14))
+        tk.Label(header, text="Hiperion Assessoria Contábil · um certificado, várias empresas", bg=BRAND,
+                 fg="#c9d8ee", font=(UI_FONT[0], 10)).pack(side="left")
+        tk.Label(header, text=f"v{APP_VERSION}", bg=BRAND, fg="#c9d8ee", font=(UI_FONT[0], 9)).pack(side="right", padx=(8, 20))
+        toggle = tk.Label(header, text="☀  Tema claro" if self.theme == "dark" else "☾  Tema escuro", bg=BRAND,
+                          fg="white", font=(UI_FONT[0], 9), cursor="hand2", padx=10, pady=4,
+                          highlightthickness=1, highlightbackground="#5f86b3")
+        toggle.pack(side="right")
+        toggle.bind("<Button-1>", lambda _e: self._toggle_theme())
 
-        # 1. Certificado
-        cert = ttk.LabelFrame(body, text="1. Certificado do procurador (A1 .pfx / .p12)", padding=10)
-        cert.grid(row=0, column=0, sticky="ew"); cert.columnconfigure(1, weight=1)
+        shell = ttk.Frame(self); shell.pack(fill="both", expand=True)
+        shell.columnconfigure(1, weight=1); shell.rowconfigure(0, weight=1)
+
+        # ── Barra lateral: configuração em passos ──
+        side = ttk.Frame(shell, style="Side.TFrame", padding=(18, 14), width=350)
+        side.grid(row=0, column=0, sticky="nsew"); side.grid_propagate(False); side.columnconfigure(0, weight=1)
+        r = 0
+
+        def title(text):
+            nonlocal r
+            ttk.Label(side, text=text, style="SideTitle.TLabel").grid(row=r, column=0, sticky="w", pady=(14 if r else 0, 4))
+            r += 1
+
+        def row(widget, **kw):
+            nonlocal r
+            widget.grid(row=r, column=0, sticky=kw.pop("sticky", "ew"), **kw)
+            r += 1
+            return widget
+
         self.cert_path, self.cert_pass = tk.StringVar(), tk.StringVar()
         self.remember = tk.BooleanVar(value=True)
-        ttk.Label(cert, text="Arquivo").grid(row=0, column=0, sticky="w")
-        ttk.Entry(cert, textvariable=self.cert_path).grid(row=0, column=1, sticky="ew", padx=6)
-        ttk.Button(cert, text="Escolher…", command=self._choose_cert).grid(row=0, column=2)
-        ttk.Label(cert, text="Senha").grid(row=1, column=0, sticky="w", pady=(6, 0))
-        ttk.Entry(cert, textvariable=self.cert_pass, show="•").grid(row=1, column=1, sticky="ew", padx=6, pady=(6, 0))
-        ttk.Button(cert, text="Testar", command=self._test_cert).grid(row=1, column=2, pady=(6, 0))
-        ttk.Checkbutton(cert, text="Lembrar senha neste computador (protegida pelo Windows)",
-                        variable=self.remember).grid(row=2, column=1, sticky="w", padx=6, pady=(4, 0))
-        self.cert_info = ttk.Label(cert, text="", foreground="#555")
-        self.cert_info.grid(row=3, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        title("1  Certificado A1 do escritório")
+        line = row(ttk.Frame(side, style="Side.TFrame")); line.columnconfigure(0, weight=1)
+        ttk.Entry(line, textvariable=self.cert_path).grid(row=0, column=0, sticky="ew")
+        self._btn(line, text="…", width=3, command=self._choose_cert).grid(row=0, column=1, padx=(4, 0))
+        line = row(ttk.Frame(side, style="Side.TFrame"), pady=(6, 0)); line.columnconfigure(0, weight=1)
+        ttk.Entry(line, textvariable=self.cert_pass, show="•").grid(row=0, column=0, sticky="ew")
+        self._btn(line, text="Testar", command=self._test_cert).grid(row=0, column=1, padx=(4, 0))
+        row(ttk.Checkbutton(side, text="Lembrar senha neste PC", variable=self.remember, style="Side.TCheckbutton"),
+            sticky="w", pady=(4, 0))
+        self.cert_info = row(ttk.Label(side, text="Escolha o .pfx e digite a senha", style="SideHint.TLabel",
+                                       wraplength=310), sticky="w")
 
-        # 2. Pasta
-        dest = ttk.LabelFrame(body, text="2. Pasta onde salvar", padding=10)
-        dest.grid(row=1, column=0, sticky="ew", pady=8); dest.columnconfigure(0, weight=1)
         self.root_path = tk.StringVar()
-        ttk.Entry(dest, textvariable=self.root_path).grid(row=0, column=0, sticky="ew")
-        ttk.Button(dest, text="Escolher…", command=self._choose_root).grid(row=0, column=1, padx=(6, 0))
-        ttk.Button(dest, text="Abrir", command=lambda: self._open(self.root_path.get())).grid(row=0, column=2, padx=(6, 0))
-        ttk.Label(dest, text="Fica: EMPRESA - CNPJ \\ Ano \\ Mês \\ Emitidas | Recebidas | Eventos",
-                  foreground="#555").grid(row=1, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        title("2  Pasta de destino")
+        line = row(ttk.Frame(side, style="Side.TFrame")); line.columnconfigure(0, weight=1)
+        ttk.Entry(line, textvariable=self.root_path).grid(row=0, column=0, sticky="ew")
+        self._btn(line, text="…", width=3, command=self._choose_root).grid(row=0, column=1, padx=(4, 0))
+        self._btn(line, text="Abrir", command=lambda: self._open(self.root_path.get())).grid(row=0, column=2, padx=(4, 0))
+        row(ttk.Label(side, text="EMPRESA - CNPJ \\ Ano \\ Mês \\ Emitidas | Recebidas", style="SideHint.TLabel"), sticky="w")
 
-        # 3. Empresas + resultado
-        mid = ttk.Frame(body); mid.grid(row=2, column=0, sticky="nsew"); body.rowconfigure(2, weight=1)
-        mid.columnconfigure(1, weight=1); mid.rowconfigure(0, weight=1)
+        title("3  Empresas (CNPJ)")
+        box = row(ttk.Frame(side, style="Side.TFrame"), sticky="nsew"); side.rowconfigure(r - 1, weight=1)
+        box.columnconfigure(0, weight=1); box.rowconfigure(0, weight=1)
+        self.cnpj_text = tk.Text(box, height=6, font=("Consolas", 10), undo=True, relief="flat", bd=0, bg=FIELD, fg=INK, insertbackground=INK,
+                                 highlightthickness=1, highlightbackground=LINE, highlightcolor=BRAND, padx=6, pady=4)
+        self.cnpj_text.grid(row=0, column=0, sticky="nsew")
+        sb = ttk.Scrollbar(box, orient="vertical", command=self.cnpj_text.yview); sb.grid(row=0, column=1, sticky="ns")
+        self.cnpj_text.configure(yscrollcommand=sb.set)
+        line = row(ttk.Frame(side, style="Side.TFrame"), pady=(6, 0)); line.columnconfigure((0, 1), weight=1)
+        self._btn(line, text="Importar TXT", command=self._import_txt).grid(row=0, column=0, sticky="ew")
+        self._btn(line, text="Conferir", command=self._check_list).grid(row=0, column=1, sticky="ew", padx=(4, 0))
+        self.list_info = row(ttk.Label(side, text="", style="SideHint.TLabel", wraplength=310), sticky="w")
 
-        lst = ttk.LabelFrame(mid, text="3. CNPJ das empresas", padding=10)
-        lst.grid(row=0, column=0, sticky="nsew", padx=(0, 8)); lst.rowconfigure(1, weight=1)
-        ttk.Label(lst, text="Um por linha (pode colar com nome, ponto, traço…)", foreground="#555").grid(row=0, column=0, columnspan=2, sticky="w")
-        self.cnpj_text = tk.Text(lst, width=30, height=10, font=("Consolas", 10), undo=True)
-        self.cnpj_text.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=4)
-        ttk.Button(lst, text="Importar TXT…", command=self._import_txt).grid(row=2, column=0, sticky="ew")
-        ttk.Button(lst, text="Conferir lista", command=self._check_list).grid(row=2, column=1, sticky="ew", padx=(4, 0))
-        self.list_info = ttk.Label(lst, text="", foreground="#555"); self.list_info.grid(row=3, column=0, columnspan=2, sticky="w")
-
-        res = ttk.LabelFrame(mid, text="Resultado — dois cliques abre a pasta da empresa", padding=10)
-        res.grid(row=0, column=1, sticky="nsew"); res.rowconfigure(0, weight=1); res.columnconfigure(0, weight=1)
-        cols = (("doc", "CNPJ", 140), ("name", "Empresa", 220), ("status", "Situação", 110),
-                ("new", "Novos", 60), ("nsu", "Último NSU", 80), ("msg", "Detalhe", 260))
-        self.tree = ttk.Treeview(res, columns=[c[0] for c in cols], show="headings", height=10)
-        for key, text, width in cols:
-            self.tree.heading(key, text=text); self.tree.column(key, width=width, stretch=key in ("name", "msg"))
-        for tag, bg in (("ok", "#d9f2df"), ("vazio", "#eef1f4"), ("sem_procuracao", "#fff1cc"),
-                        ("erro", "#ffd9d9"), ("cancelado", "#eef1f4"), ("rodando", "#dbe9ff")):
-            self.tree.tag_configure(tag, background=bg)
-        scroll = ttk.Scrollbar(res, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=scroll.set)
-        self.tree.grid(row=0, column=0, sticky="nsew"); scroll.grid(row=0, column=1, sticky="ns")
-        self.tree.bind("<Double-1>", self._open_company)
-
-        # 4. Ações
-        act = ttk.Frame(body); act.grid(row=3, column=0, sticky="ew", pady=(8, 0)); act.columnconfigure(3, weight=1)
-        comp = ttk.Frame(act); comp.grid(row=0, column=0, columnspan=5, sticky="w", pady=(0, 6))
-        prev = date.today().replace(day=1).toordinal() - 1  # competência padrão: mês anterior
-        prev = date.fromordinal(prev)
+        prev = date.fromordinal(date.today().replace(day=1).toordinal() - 1)  # padrão: mês anterior
         self.by_competence = tk.BooleanVar(value=False)
         self.comp_vars = [tk.IntVar(value=prev.month), tk.IntVar(value=prev.year),
                           tk.IntVar(value=prev.month), tk.IntVar(value=prev.year)]
-        ttk.Checkbutton(comp, text="Só a competência", variable=self.by_competence,
-                        command=self._toggle_competence).pack(side="left")
+        title("4  Competência")
+        row(ttk.Checkbutton(side, text="Baixar só este período", variable=self.by_competence,
+                            command=self._toggle_competence, style="Side.TCheckbutton"), sticky="w")
+        comp = row(ttk.Frame(side, style="Side.TFrame"), sticky="w", pady=(4, 0))
         self.comp_widgets = []
-        for label, (m, y) in (("de", self.comp_vars[:2]), ("até", self.comp_vars[2:])):
-            ttk.Label(comp, text=label).pack(side="left", padx=(10, 4))
-            for var, lo, hi, width in ((m, 1, 12, 4), (y, 2020, 2100, 6)):
-                box = ttk.Spinbox(comp, from_=lo, to=hi, width=width, textvariable=var)
-                box.pack(side="left", padx=1); self.comp_widgets.append(box)
-        self.comp_hint = ttk.Label(comp, text="Sem marcar: baixa tudo o que entrou desde a última vez.", foreground="#555")
-        self.comp_hint.pack(side="left", padx=10)
+        for i, (label, (m, y)) in enumerate((("de", self.comp_vars[:2]), ("até", self.comp_vars[2:]))):
+            ttk.Label(comp, text=label, style="Side.TLabel", width=4).grid(row=i, column=0, sticky="w", pady=2)
+            for col, (var, lo, hi, width) in enumerate(((m, 1, 12, 4), (y, 2020, 2100, 6)), 1):
+                spin = ttk.Spinbox(comp, from_=lo, to=hi, width=width, textvariable=var)
+                spin.grid(row=i, column=col, padx=(0, 6), pady=2); self.comp_widgets.append(spin)
+        self.comp_hint = row(ttk.Label(side, text="", style="SideHint.TLabel", wraplength=310), sticky="w")
+        self.from_zero = tk.BooleanVar(value=False)
+        self.from_zero_box = row(ttk.Checkbutton(side, text="Baixar tudo de novo (desde o NSU 0)",
+                                                 variable=self.from_zero, style="Side.TCheckbutton"), sticky="w", pady=(2, 0))
         self._toggle_competence()
 
-        self.from_zero = tk.BooleanVar(value=False)
-        self.run_button = ttk.Button(act, text="Baixar XMLs", command=self._start)
-        self.run_button.grid(row=1, column=0)
-        self.stop_button = ttk.Button(act, text="Parar", command=self._stop, state="disabled")
-        self.stop_button.grid(row=1, column=1, padx=6)
-        self.from_zero_box = ttk.Checkbutton(act, text="Baixar tudo de novo (ignora o último NSU)", variable=self.from_zero)
-        self.from_zero_box.grid(row=1, column=2, padx=6)
-        ttk.Button(act, text="Procuração no e-CAC", command=lambda: webbrowser.open(ECAC_PROCURACAO)).grid(row=1, column=4)
-        self.progress = ttk.Progressbar(act, maximum=1); self.progress.grid(row=2, column=0, columnspan=5, sticky="ew", pady=(8, 2))
-        self.status = ttk.Label(act, text="Pronto"); self.status.grid(row=3, column=0, columnspan=5, sticky="w")
+        # ── Área principal ──
+        main = ttk.Frame(shell, padding=(20, 16)); main.grid(row=0, column=1, sticky="nsew")
+        main.columnconfigure(0, weight=1); main.rowconfigure(3, weight=1)
 
-        self.log = tk.Text(body, height=6, state="disabled", wrap="word", font=("Consolas", 9))
-        self.log.grid(row=4, column=0, sticky="nsew", pady=(6, 0))
-        ttk.Label(body, text=f"{APP_NAME} {APP_VERSION} — Guilherme Andrade dos Santos Trevisan",
-                  foreground="#888", font=("Segoe UI", 8)).grid(row=5, column=0, sticky="e")
+        actions = ttk.Frame(main); actions.grid(row=0, column=0, sticky="ew"); actions.columnconfigure(2, weight=1)
+        self.run_button = ttk.Button(actions, text="Baixar XMLs", style="Big.Accent.TButton", command=self._start)
+        self.run_button.grid(row=0, column=0)
+        stop = self._btn(actions, text="Parar", command=self._stop, state="disabled")
+        stop.grid(row=0, column=1, padx=8); self.stop_button = stop.button
+        self._btn(actions, text="Relatório de faturamento", command=self._report).grid(row=0, column=3)
+        self._btn(actions, text="Procuração no e-CAC ↗",
+                   command=lambda: webbrowser.open(ECAC_PROCURACAO)).grid(row=0, column=4, padx=(8, 0))
+
+        cards = ttk.Frame(main); cards.grid(row=1, column=0, sticky="ew", pady=(16, 10))
+        self.card_vars = {}
+        for i, (key, label, color) in enumerate((("total", "Empresas", INK), ("ok", "Com notas novas", GREEN),
+                                                  ("vazio", "Sem novidade", MUTED), ("sem_procuracao", "Sem procuração", AMBER),
+                                                  ("erro", "Com erro", RED))):
+            cards.columnconfigure(i, weight=1)
+            card = tk.Frame(cards, bg=CARD, highlightthickness=1, highlightbackground=LINE)
+            card.grid(row=0, column=i, sticky="ew", padx=(0 if i == 0 else 8, 0))
+            tk.Frame(card, bg=color, height=3).pack(fill="x")
+            self.card_vars[key] = tk.StringVar(value="0")
+            tk.Label(card, textvariable=self.card_vars[key], bg=CARD, fg=color,
+                     font=(UI_FONT[0], 20, "bold")).pack(anchor="w", padx=12, pady=(6, 0))
+            tk.Label(card, text=label, bg=CARD, fg=MUTED, font=(UI_FONT[0], 9)).pack(anchor="w", padx=12, pady=(0, 8))
+
+        prog = ttk.Frame(main); prog.grid(row=2, column=0, sticky="ew", pady=(0, 10)); prog.columnconfigure(0, weight=1)
+        self.progress = ttk.Progressbar(prog, maximum=1); self.progress.grid(row=0, column=0, sticky="ew")
+        self.status = ttk.Label(prog, text="Pronto", foreground=MUTED); self.status.grid(row=1, column=0, sticky="w", pady=(4, 0))
+
+        table = ttk.Frame(main); table.grid(row=3, column=0, sticky="nsew")
+        table.rowconfigure(0, weight=1); table.columnconfigure(0, weight=1)
+        cols = (("doc", "CNPJ", 150), ("name", "Empresa", 240), ("status", "Situação", 130),
+                ("new", "Novos", 60), ("nsu", "Último NSU", 85), ("msg", "Detalhe", 280))
+        self.tree = ttk.Treeview(table, columns=[c[0] for c in cols], show="headings")
+        for key, text, width in cols:
+            self.tree.heading(key, text=text, anchor="w")
+            self.tree.column(key, width=width, stretch=key in ("name", "msg"),
+                             anchor="center" if key in ("new", "nsu") else "w")
+        for tag, (bg, fg) in ROWS.items():
+            self.tree.tag_configure(tag, background=bg, foreground=fg)
+        scroll = ttk.Scrollbar(table, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scroll.set)
+        self.tree.grid(row=0, column=0, sticky="nsew"); scroll.grid(row=0, column=1, sticky="ns")
+        self.tree.bind("<Double-1>", self._open_company)
+        self.tree.bind("<<TreeviewSelect>>", self._show_detail)
+        self.detail = ttk.Label(main, text="Clique numa empresa para ver o detalhe; dois cliques abre a pasta dela.",
+                                foreground=MUTED, wraplength=860)
+        self.detail.grid(row=4, column=0, sticky="w", pady=(6, 0))
+
+        foot = ttk.Frame(main); foot.grid(row=5, column=0, sticky="ew", pady=(8, 0)); foot.columnconfigure(1, weight=1)
+        toggle = self._btn(foot, text="▸ Mostrar log", command=self._toggle_log)
+        toggle.grid(row=0, column=0, sticky="w"); self.log_toggle = toggle.button
+        ttk.Label(foot, text="Guilherme Andrade dos Santos Trevisan", foreground=MUTED,
+                  font=(UI_FONT[0], 8)).grid(row=0, column=2, sticky="e")
+        self.log = tk.Text(main, height=7, state="disabled", wrap="word", font=("Consolas", 9), relief="flat",
+                           bg=LOGBG, fg=INK, highlightthickness=1, highlightbackground=LINE, padx=8, pady=6)
+
+    def _keep_opaque(self):
+        """Desfaz transparência/blur que programas de personalização aplicam em todas as janelas.
+
+        Eles marcam a janela como "layered" com alpha < 255 ou ligam o efeito acrílico do DWM;
+        aqui tiramos os dois e repetimos a cada 1,5 s, porque o programa reaplica.
+        """
+        try:
+            import ctypes
+            from ctypes import wintypes
+            user32 = ctypes.windll.user32
+            hwnd = user32.GetParent(self.winfo_id()) or self.winfo_id()
+            GWL_EXSTYLE, WS_EX_LAYERED = -20, 0x00080000
+            style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+            if style & WS_EX_LAYERED:
+                user32.SetLayeredWindowAttributes(hwnd, 0, 255, 0x2)  # LWA_ALPHA = 255 (opaco)
+                user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style & ~WS_EX_LAYERED)
+
+            class ACCENT(ctypes.Structure):
+                _fields_ = [("state", ctypes.c_int), ("flags", ctypes.c_int),
+                            ("color", ctypes.c_uint), ("anim", ctypes.c_int)]
+
+            class WCAD(ctypes.Structure):
+                _fields_ = [("attr", ctypes.c_int), ("data", ctypes.c_void_p), ("size", ctypes.c_size_t)]
+
+            accent = ACCENT(0, 0, 0, 0)  # ACCENT_DISABLED
+            data = WCAD(19, ctypes.cast(ctypes.pointer(accent), ctypes.c_void_p), ctypes.sizeof(accent))
+            user32.SetWindowCompositionAttribute(wintypes.HWND(hwnd), ctypes.byref(data))
+            backdrop = ctypes.c_int(1)  # DWMSBT_NONE: sem Mica/acrílico
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 38, ctypes.byref(backdrop), ctypes.sizeof(backdrop))
+        except Exception:
+            return  # fora do Windows ou API indisponível: não insiste
+        self.after(1500, self._keep_opaque)
+
+    def _btn(self, parent, **kw):
+        """Botão com contorno visível (o do tema some em fundo claro). Devolve a moldura; o botão fica em .button."""
+        frame = tk.Frame(parent, bg=LINE, padx=1, pady=1)
+        frame.button = ttk.Button(frame, **kw)
+        frame.button.pack(fill="both", expand=True)
+        return frame
+
+    def _toggle_theme(self):
+        if self.worker and self.worker.is_alive():
+            messagebox.showinfo("Tema", "Espere o download terminar para trocar o tema."); return
+        keep = {name: getattr(self, name).get() for name in
+                ("cert_path", "cert_pass", "remember", "root_path", "by_competence", "from_zero")}
+        comp = [v.get() for v in self.comp_vars]
+        cnpj = self.cnpj_text.get("1.0", "end-1c")
+        rows = [(i, self.tree.item(i, "values"), self.tree.item(i, "tags")) for i in self.tree.get_children()]
+        log, log_open = self.log.get("1.0", "end-1c"), self.log.winfo_ismapped()
+        texts = {name: getattr(self, name).cget("text") for name in ("cert_info", "list_info", "status", "detail")}
+        prog = (self.progress["maximum"], self.progress["value"])
+
+        self.theme = "dark" if self.theme == "light" else "light"
+        self.store.set("theme", self.theme)
+        for child in self.winfo_children():
+            child.destroy()
+        self._build()
+
+        for name, value in keep.items():
+            getattr(self, name).set(value)
+        for var, value in zip(self.comp_vars, comp):
+            var.set(value)
+        self._toggle_competence()
+        self.cnpj_text.insert("1.0", cnpj)
+        for iid, values, tags in rows:
+            self.tree.insert("", "end", iid=iid, values=values, tags=tags)
+        self._update_cards()
+        self.log.configure(state="normal"); self.log.insert("1.0", log); self.log.configure(state="disabled")
+        if log_open: self._toggle_log()
+        for name, text in texts.items():
+            getattr(self, name).configure(text=text)
+        info = texts["cert_info"]
+        self.cert_info.configure(foreground=GREEN if info.startswith("✓") else RED if info.startswith("✗") else MUTED)
+        self.list_info.configure(foreground=RED if "inválido" in texts["list_info"] else MUTED)
+        self.progress.configure(maximum=prog[0], value=prog[1])
+
+    def _toggle_log(self):
+        if self.log.winfo_ismapped():
+            self.log.grid_remove(); self.log_toggle.configure(text="▸ Mostrar log")
+        else:
+            self.log.grid(row=6, column=0, sticky="nsew", pady=(6, 0)); self.log_toggle.configure(text="▾ Esconder log")
+
+    def _show_detail(self, _event=None):
+        sel = self.tree.selection()
+        if sel:
+            v = self.tree.item(sel[0], "values")
+            self.detail.configure(text=f"{v[0]}  {v[1]} — {v[2] or 'na lista'}: {v[5] or '—'}")
+
+    def _update_cards(self):
+        counts = {"total": len(self.tree.get_children())}
+        for iid in self.tree.get_children():
+            for tag in self.tree.item(iid, "tags"):
+                counts[tag] = counts.get(tag, 0) + 1
+        for key, var in self.card_vars.items():
+            var.set(str(counts.get(key, 0)))
 
     # ── Estado salvo ────────────────────────────────────────────────────────
     def _load(self):
@@ -182,10 +378,10 @@ class App(tk.Tk):
 
     def _toggle_competence(self):
         on = self.by_competence.get()
-        for box in self.comp_widgets: box.configure(state="normal" if on else "disabled")
         if hasattr(self, "from_zero_box"): self.from_zero_box.configure(state="disabled" if on else "normal")
-        self.comp_hint.configure(text="Lê a caixa inteira e salva só as notas desse período (não mexe no último NSU)."
-                                 if on else "Sem marcar: baixa tudo o que entrou desde a última vez.")
+        self.comp_hint.configure(text="Lê a caixa inteira e salva só esse período (não mexe no último NSU)."
+                                 if on else "Desmarcado: baixa tudo o que entrou desde a última vez. "
+                                            "O período também é usado no relatório.")
 
     def _competence(self):
         """("AAAA-MM", "AAAA-MM") ou None; levanta ValueError se o período for inválido."""
@@ -201,9 +397,9 @@ class App(tk.Tk):
         try:
             _, info = certificate.load(Path(self.cert_path.get().strip()), self.cert_pass.get())
         except RuntimeError as exc:
-            self.cert_info.configure(text=f"✗ {exc}", foreground="#a40000"); return None
-        self.cert_info.configure(foreground="#165b2b", text=(
-            f"✓ {info.holder} — {fmt(info.document) or 'documento não identificado'} — válido até {info.expires:%d/%m/%Y}"))
+            self.cert_info.configure(text=f"✗ {exc}", foreground=RED); return None
+        self.cert_info.configure(foreground=GREEN, text=(
+            f"✓ {info.holder}\n{fmt(info.document) or 'documento não identificado'} · válido até {info.expires:%d/%m/%Y}"))
         return info
 
     def _import_txt(self):
@@ -231,7 +427,8 @@ class App(tk.Tk):
                                                        c.last_nsu if c else 0, f"última consulta {c.last_sync}" if c and c.last_sync else ""))
         text = f"{len(docs)} empresa(s) na lista"
         if invalid: text += f" — {len(invalid)} inválido(s): {', '.join(fmt(d) for d in invalid[:3])}"
-        self.list_info.configure(text=text, foreground="#a40000" if invalid else "#555")
+        self.list_info.configure(text=text, foreground=RED if invalid else MUTED)
+        self._update_cards()
         if not quiet and invalid:
             messagebox.showwarning("CNPJ inválido", "Estes não passaram no dígito verificador e serão ignorados:\n\n"
                                    + "\n".join(fmt(d) for d in invalid))
@@ -276,6 +473,33 @@ class App(tk.Tk):
             self.events.put(("done", totals))
         self.worker = threading.Thread(target=work, daemon=True); self.worker.start()
 
+    def _report(self):
+        """Excel de faturamento entrada/saída do período de/até, lendo os XML já baixados."""
+        root = self.root_path.get().strip()
+        if not root or not Path(root).is_dir():
+            messagebox.showwarning("Relatório", "Escolha a pasta onde as notas foram salvas."); return
+        try:
+            m1, y1, m2, y2 = (int(v.get()) for v in self.comp_vars)
+            start, end = f"{y1:04d}-{m1:02d}", f"{y2:04d}-{m2:02d}"
+            if not (1 <= m1 <= 12 and 1 <= m2 <= 12) or start > end: raise ValueError
+        except (tk.TclError, ValueError):
+            messagebox.showwarning("Relatório", "Confira o período de/até (mês e ano)."); return
+        docs = set(self._check_list(quiet=True))
+        name = f"Faturamento {start}" + ("" if start == end else f" a {end}") + ".xlsx"
+        path = filedialog.asksaveasfilename(title="Salvar relatório", initialdir=root, initialfile=name,
+                                            defaultextension=".xlsx", filetypes=[("Excel", "*.xlsx")])
+        if not path: return
+        rows = report.collect(Path(root), start, end, docs or None)
+        if not rows:
+            messagebox.showinfo("Relatório", "Nenhuma nota encontrada nesse período nas pastas"
+                                + (" das empresas da lista." if docs else ".")); return
+        try:
+            report.write_xlsx(Path(path), rows, start, end)
+        except PermissionError:
+            messagebox.showerror("Relatório", "Não deu pra salvar — o arquivo está aberto no Excel?"); return
+        self._log(f"Relatório salvo: {path} ({len(rows)} nota(s))")
+        os.startfile(path)
+
     def _stop(self):
         self.stop_flag.set(); self.status.configure(text="Parando depois do lote atual…")
 
@@ -314,6 +538,7 @@ class App(tk.Tk):
         for idx, val in ((1, name), (2, STATUS_LABEL.get(status) if status else None), (3, new), (4, nsu), (5, msg)):
             if val is not None: values[idx] = val
         self.tree.item(d, values=values, tags=(status,) if status else self.tree.item(d, "tags"))
+        if status: self._update_cards()
 
     def _log(self, text):
         self.log.configure(state="normal"); self.log.insert("end", text + "\n"); self.log.see("end")
@@ -337,7 +562,11 @@ class App(tk.Tk):
         self.destroy()
 
 
-def main(): App().mainloop()
+def main():
+    try:  # nítido em telas com escala 125%/150% (sem isso o Windows borra a janela)
+        import ctypes; ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    except Exception: pass
+    App().mainloop()
 
 
 if __name__ == "__main__":

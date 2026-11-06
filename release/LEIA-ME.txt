@@ -1,6 +1,6 @@
-NFS-e HIPERION - VERSAO 2.0.0 (TESTE)
+NFS-e HIPERION - VERSAO 2.1.0 (TESTE)
 
-1. Copie NFSe-Hiperion-2.0.0.exe para o computador. Nao precisa instalar nada.
+1. Copie NFSe-Hiperion-2.1.0.exe para o computador. Nao precisa instalar nada.
 2. Se o Windows mostrar "O Windows protegeu o computador", clique em
    "Mais informacoes" > "Executar assim mesmo".
 3. Certificado: escolha o A1 (.pfx) do escritorio/procurador, digite a senha e clique em Testar.
@@ -8,6 +8,7 @@ NFS-e HIPERION - VERSAO 2.0.0 (TESTE)
 5. CNPJ: digite um por linha ou clique em "Importar TXT".
 6. Opcional: marque "So a competencia" e escolha o periodo.
 7. Clique em "Baixar XMLs".
+8. Relatorio: escolha o periodo de/ate e clique em "Relatorio de faturamento" (gera Excel de entradas e saidas).
 
 Cores do resultado:
   Verde    = baixou notas
